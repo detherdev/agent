@@ -1,0 +1,74 @@
+{
+  "name": "Chase late payments",
+  "tagline": "Each morning, I draft and send polite reminders for every overdue invoice — one email per customer.",
+  "description": "I check QuickBooks daily for overdue invoices, group them by customer so nobody gets multiple emails, escalate tone with age (friendly → firm → final notice), and check that I haven't already chased them recently. I'll ask before sending anything over $5,000 or any final-notice email.",
+  "time_saved": "30–60 minutes a day",
+  "what_youll_connect": ["QuickBooks", "Gmail"],
+  "trigger_kind": "schedule",
+  "trigger_config": {
+    "cron": "0 9 * * 1-5",
+    "timezone": "America/Los_Angeles"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "as_of": { "type": "string", "description": "ISO date; defaults to today" }
+    }
+  },
+  "tool_config": {
+    "connectors": [
+      { "slug": "quickbooks" },
+      { "slug": "gmail" }
+    ],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 80,
+    "budget_usd": 1.5,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": [
+      {
+        "tool": "gmail_send",
+        "when": "tier == 'T3' or total_balance > 5000",
+        "reason": "Final-notice or large-balance reminder — please review before sending"
+      }
+    ]
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": "claude-opus-4-7",
+  "system_prompt_path": "system-prompts/ar-chasing.md",
+  "test_cases": [
+    {
+      "name": "no overdue invoices",
+      "input": { "as_of": "2026-05-10" },
+      "rubric": "The agent calls quickbooks_search_invoices with overdue=true. When it gets back zero results (the test fixture should arrange this), it ends with 'No overdue invoices today.' and does NOT call gmail_send."
+    },
+    {
+      "name": "single tier-1 reminder",
+      "input": { "as_of": "2026-05-10" },
+      "rubric": "When one customer has one invoice that's 5 days overdue for $1,200, the agent fetches the customer, drafts a friendly (T1) reminder addressed to them by name, mentions the invoice number and amount, and sends it via gmail_send (under $5,000, no approval gate). The summary reports 1 customer chased."
+    },
+    {
+      "name": "consolidates multiple invoices for one customer",
+      "input": { "as_of": "2026-05-10" },
+      "rubric": "When a customer has three overdue invoices, the agent sends ONE email listing all three (with numbers, due dates, and amounts) — not three separate emails. The summary should reflect 1 email sent for 3 invoices."
+    },
+    {
+      "name": "skips already-chased customer",
+      "input": { "as_of": "2026-05-10" },
+      "rubric": "When gmail_search returns a recent reminder thread to that customer, the agent does NOT send another email. The summary mentions the skip."
+    },
+    {
+      "name": "T3 final notice requires approval",
+      "input": { "as_of": "2026-05-10" },
+      "rubric": "When the oldest overdue invoice is 60+ days late, the agent drafts a T3 final-notice email. The platform's approval guardrail trips before gmail_send fires (run pauses with status awaiting_approval). It is acceptable that the agent never reaches the summary on this run — that's the gate doing its job."
+    },
+    {
+      "name": "missing customer email",
+      "input": { "as_of": "2026-05-10" },
+      "rubric": "When quickbooks_get_customer returns a customer with no PrimaryEmailAddr, the agent does NOT call gmail_send (no fabricated email). It lists the customer in its summary with the missing-email anomaly noted."
+    }
+  ]
+}

@@ -7,7 +7,14 @@ export default function Home() {
       <p className="mt-4 text-neutral-400">
         It handles the work; you stay in the loop on anything that matters.
       </p>
-      <div className="mt-10 grid gap-3">
+      <div className="mt-10 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/jobs"
+          className="rounded-xl border border-neutral-800 bg-neutral-900/50 px-5 py-4 hover:bg-neutral-900"
+        >
+          <div className="text-base font-medium">Pick a job</div>
+          <div className="text-sm text-neutral-500">Browse what your assistant can handle.</div>
+        </Link>
         <Link
           href="/inbox"
           className="rounded-xl border border-neutral-800 bg-neutral-900/50 px-5 py-4 hover:bg-neutral-900"

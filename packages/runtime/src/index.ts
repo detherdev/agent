@@ -20,3 +20,14 @@ export {
   createApproval,
   loadPendingApproval,
 } from "./state.js";
+export {
+  installWorkflow,
+  readPackJob,
+  listPackJobs,
+  ensureWorkspace,
+  isJobInstalled,
+  type WorkflowInstallSpec,
+  type PackJobMetadata,
+  type PackJobFile,
+  type InstallResult,
+} from "./install.js";

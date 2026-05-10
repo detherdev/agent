@@ -5,6 +5,7 @@ import { workflowsRouter } from "./routes/workflows.js";
 import { runsRouter } from "./routes/runs.js";
 import { approvalsRouter } from "./routes/approvals.js";
 import { webhooksRouter } from "./routes/webhooks.js";
+import { catalogRouter } from "./routes/catalog.js";
 
 const app = new Hono();
 
@@ -14,6 +15,7 @@ app.route("/v1/workflows", workflowsRouter);
 app.route("/v1/runs", runsRouter);
 app.route("/v1/approvals", approvalsRouter);
 app.route("/v1/webhooks", webhooksRouter);
+app.route("/v1/catalog", catalogRouter);
 
 const port = Number(process.env.API_PORT ?? 3001);
 serve({ fetch: app.fetch, port });

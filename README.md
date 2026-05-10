@@ -43,12 +43,34 @@ packs/
 
 ```bash
 pnpm install
-cp .env.example .env  # fill in keys
-pnpm db:migrate       # requires DATABASE_URL
-pnpm dev:api          # API on :3001
-pnpm dev:web          # web on :3000
-pnpm dev:worker       # agent worker (separate terminal)
+cp .env.example .env             # fill in keys
+
+docker compose up -d             # postgres + redis on default ports
+pnpm verify                      # apply schema + install bookkeeping pack
+                                 #   asserts the install round-trip is sound
+
+pnpm dev:api                     # API on :3001
+pnpm dev:web                     # web on :3000  → /jobs and /inbox
+pnpm dev:worker                  # agent worker (separate terminal)
+
+# Optional
+pnpm test:e2e                    # Playwright (run `pnpm --filter web test:e2e:install` first)
+pnpm evals <workflow_id>         # run a workflow's test pack with Claude-as-judge
 ```
+
+## Verifying it works
+
+Three layers, each catches a different class of bug:
+
+1. **`pnpm verify`** — install round-trip. Applies schema + migrations,
+   installs the bookkeeping pack, asserts the right rows exist with the
+   right shape. Fast, no Anthropic key required.
+2. **`pnpm evals <workflow_id>`** — runs the workflow's test cases through
+   the agent loop in shadow mode, judged by Claude. This is the
+   agent-correctness layer. Requires `ANTHROPIC_API_KEY`.
+3. **`pnpm test:e2e`** — Playwright loads `/jobs`, clicks Install, asserts
+   the workflow is created. Catches API/UI wiring breakage. Requires
+   `pnpm verify` to have seeded the DB first.
 
 ## Status
 

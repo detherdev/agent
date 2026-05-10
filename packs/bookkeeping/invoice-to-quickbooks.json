@@ -1,5 +1,9 @@
 {
   "name": "Invoice → QuickBooks",
+  "tagline": "Forward an invoice email — I'll create a QuickBooks bill draft and reply to the vendor.",
+  "description": "When a vendor sends you an invoice, I read the email and any attached PDF, look up the vendor in QuickBooks (or add them), create a bill draft for you to review, and reply to the vendor confirming receipt. I'll ask you before posting any bill over a threshold you set.",
+  "time_saved": "3–5 minutes per invoice",
+  "what_youll_connect": ["Gmail", "QuickBooks"],
   "trigger_kind": "email",
   "trigger_config": {
     "label": "to-bookkeeping",

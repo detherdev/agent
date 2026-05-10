@@ -4,12 +4,15 @@ Prebuilt agent workflows for bookkeeping firms. Each workflow ships as a JSON
 spec (workflow definition + test cases) plus a system prompt in
 `system-prompts/`.
 
-## Workflows in v0
+## Workflows
 
 - `invoice-to-quickbooks` — incoming invoice email → QuickBooks bill draft,
   reply to vendor with confirmation. Approval required for amounts > $1000.
+- `ar-chasing` — daily, scans QuickBooks for overdue invoices, sends one
+  polite reminder per customer (escalating tone with age). Approval
+  required at final-notice tier or for balances > $5000.
 
-## Coming in v0.1
+## Coming next
 
 - `expense-categorization` — receipt photos / forwarded emails → categorized
   ledger entry with auto-class.

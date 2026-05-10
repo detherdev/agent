@@ -174,5 +174,65 @@ export function quickBooksTools(): ToolDefinition[] {
         return { content: summarize(res, "quickbooks_create_bill"), is_error: !res.ok };
       },
     },
+    {
+      name: "quickbooks_search_invoices",
+      description:
+        "Find QuickBooks invoices (outgoing — money owed TO you). Filter by overdue, customer name, or balance. Returns up to 50 invoices.",
+      input_schema: {
+        type: "object",
+        properties: {
+          overdue: { type: "boolean", description: "Only invoices past due (DueDate < today, Balance > 0)" },
+          customer_display_name: { type: "string" },
+          min_balance: { type: "number", description: "Minimum outstanding balance" },
+        },
+      },
+      invoke: async (input, ctx) => {
+        const { overdue, customer_display_name, min_balance } = input as {
+          overdue?: boolean;
+          customer_display_name?: string;
+          min_balance?: number;
+        };
+        const realmId = await realm(ctx.workspace_id);
+        const where: string[] = [];
+        if (overdue) {
+          const today = new Date().toISOString().slice(0, 10);
+          where.push(`Balance > '0'`, `DueDate < '${today}'`);
+        }
+        if (customer_display_name) where.push(`CustomerRef.name = '${customer_display_name.replace(/'/g, "''")}'`);
+        if (typeof min_balance === "number") where.push(`Balance >= '${min_balance}'`);
+        const sql = `select * from Invoice ${where.length ? "where " + where.join(" and ") : ""} maxresults 50`;
+        const res = await nangoProxy({
+          workspaceId: ctx.workspace_id,
+          provider: "quickbooks",
+          method: "GET",
+          endpoint: `/v3/company/${realmId}/query`,
+          query: { query: sql, minorversion: 75 },
+          headers: { Accept: "application/json" },
+        });
+        return { content: summarize(res, "quickbooks_search_invoices"), is_error: !res.ok };
+      },
+    },
+    {
+      name: "quickbooks_get_customer",
+      description: "Fetch a QuickBooks customer by id. Returns name, email, billing address, currency.",
+      input_schema: {
+        type: "object",
+        properties: { customer_id: { type: "string" } },
+        required: ["customer_id"],
+      },
+      invoke: async (input, ctx) => {
+        const { customer_id } = input as { customer_id: string };
+        const realmId = await realm(ctx.workspace_id);
+        const res = await nangoProxy({
+          workspaceId: ctx.workspace_id,
+          provider: "quickbooks",
+          method: "GET",
+          endpoint: `/v3/company/${realmId}/customer/${encodeURIComponent(customer_id)}`,
+          query: { minorversion: 75 },
+          headers: { Accept: "application/json" },
+        });
+        return { content: summarize(res, "quickbooks_get_customer"), is_error: !res.ok };
+      },
+    },
   ];
 }

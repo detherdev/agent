@@ -15,7 +15,9 @@
     "dev:worker": "pnpm --filter api worker",
     "evals": "pnpm --filter evals run",
     "db:migrate": "psql \"$DATABASE_URL\" -f db/schema.sql",
-    "pack:install": "tsx scripts/install-pack.ts"
+    "pack:install": "tsx scripts/install-pack.ts",
+    "verify": "tsx scripts/verify.ts",
+    "test:e2e": "pnpm --filter web test:e2e"
   },
   "dependencies": {
     "runtime": "workspace:*"
