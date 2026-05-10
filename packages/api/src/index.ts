@@ -11,6 +11,7 @@ import { catalogRouter } from "./routes/catalog.js";
 import { meRouter } from "./routes/me.js";
 import { connectRouter, connectWebhookRouter } from "./routes/connect.js";
 import { statsRouter } from "./routes/stats.js";
+import { inboundRouter } from "./routes/inbound.js";
 import { verifyClerkJwt, requireWorkspace } from "./middleware/auth.js";
 
 const app = new Hono();
@@ -37,6 +38,7 @@ app.use(
 app.get("/health", (c) => c.json({ ok: true }));
 app.route("/v1/connect/webhook", connectWebhookRouter);
 app.route("/v1/webhooks", webhooksRouter);
+app.route("/v1/webhooks/inbound-email", inboundRouter);
 
 // ===== Bootstrap (JWT only — workspace may not exist yet) =====
 

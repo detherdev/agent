@@ -14,7 +14,19 @@ interface MeResponse {
   workspace_id: string;
   workspace_name: string;
   onboarding_step: number;
+  inbox_address: string | null;
   is_new: boolean;
+}
+
+const INBOUND_DOMAIN = process.env.INBOUND_EMAIL_DOMAIN ?? "";
+
+function generateInboxAddress(): string | null {
+  if (!INBOUND_DOMAIN) return null;
+  // Short random local part: wx- + 12 chars of base32-ish randomness.
+  const chars = "23456789abcdefghjkmnpqrstuvwxyz";
+  let local = "wx-";
+  for (let i = 0; i < 12; i++) local += chars[Math.floor(Math.random() * chars.length)];
+  return `${local}@${INBOUND_DOMAIN}`;
 }
 
 export const meRouter = new Hono();
@@ -51,8 +63,8 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
     }
 
     let wsRow = (
-      await client.query<{ id: string; name: string; onboarding_step: number }>(
-        `select w.id, w.name, w.onboarding_step
+      await client.query<{ id: string; name: string; onboarding_step: number; inbox_address: string | null }>(
+        `select w.id, w.name, w.onboarding_step, w.inbox_address
            from workspaces w
            join memberships m on m.workspace_id = w.id
           where m.user_id = $1 and m.role = 'owner'
@@ -64,9 +76,16 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
 
     if (!wsRow) {
       const name = body.workspace_name ?? deriveName(body.email);
-      const r = await client.query<{ id: string; name: string; onboarding_step: number }>(
-        `insert into workspaces (name) values ($1) returning id, name, onboarding_step`,
-        [name],
+      const inbox = generateInboxAddress();
+      const r = await client.query<{
+        id: string;
+        name: string;
+        onboarding_step: number;
+        inbox_address: string | null;
+      }>(
+        `insert into workspaces (name, inbox_address) values ($1, $2)
+           returning id, name, onboarding_step, inbox_address`,
+        [name, inbox],
       );
       wsRow = r.rows[0]!;
       await client.query(
@@ -75,6 +94,13 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
         [wsRow.id, userRow!.id],
       );
       isNew = true;
+    } else if (!wsRow.inbox_address) {
+      // Backfill an inbox for an existing workspace once the env var is set.
+      const inbox = generateInboxAddress();
+      if (inbox) {
+        await client.query(`update workspaces set inbox_address = $1 where id = $2`, [inbox, wsRow.id]);
+        wsRow.inbox_address = inbox;
+      }
     }
 
     return { userRow, wsRow, isNew };
@@ -85,6 +111,7 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
     workspace_id: result.wsRow.id,
     workspace_name: result.wsRow.name,
     onboarding_step: result.wsRow.onboarding_step,
+    inbox_address: result.wsRow.inbox_address,
     is_new: result.isNew,
   };
   return c.json(out);

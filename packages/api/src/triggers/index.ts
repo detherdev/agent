@@ -1,13 +1,16 @@
 import { log } from "runtime";
 import { scheduleTick } from "./schedule.js";
 import { emailTick } from "./email.js";
+import { driveTick } from "./drive.js";
 import { reaperTick } from "./reaper.js";
 
 /**
- * Run the trigger loops forever. Three timers, intentionally not aligned:
+ * Run the trigger loops forever. Four timers, intentionally not aligned so
+ * one slow tick doesn't pile onto another:
  *   schedule  every 60s   (cron resolution = 1 minute)
  *   email     every 90s   (Gmail API rate limits + reasonable freshness)
- *   reaper    every 120s  (recover runs stranded by worker crashes)
+ *   drive     every 120s  (Drive folder watch — same model as email)
+ *   reaper    every 150s  (recover runs stranded by worker crashes)
  *
  * Each tick is wrapped in try/catch so a transient error in one workflow
  * never stops the loop.
@@ -15,7 +18,8 @@ import { reaperTick } from "./reaper.js";
 export function startTriggers(): void {
   schedule(60_000, "schedule", scheduleTick);
   schedule(90_000, "email", emailTick);
-  schedule(120_000, "reaper", reaperTick);
+  schedule(120_000, "drive", driveTick);
+  schedule(150_000, "reaper", reaperTick);
 }
 
 function schedule(intervalMs: number, label: string, fn: () => Promise<void>): void {

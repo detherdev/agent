@@ -8,11 +8,15 @@ create extension if not exists "pgcrypto";
 -- ===== Tenancy =====
 
 create table if not exists workspaces (
-  id           uuid primary key default uuid_generate_v4(),
-  name         text not null,
+  id              uuid primary key default uuid_generate_v4(),
+  name            text not null,
   onboarding_step smallint not null default 0,  -- 0 welcome, 1 picked, 2 connected, 3 done
-  created_at   timestamptz not null default now()
+  inbox_address   text,                          -- workspace-scoped hosted email inbox
+  created_at      timestamptz not null default now()
 );
+
+create unique index if not exists workspaces_inbox_address_uniq
+  on workspaces(inbox_address) where inbox_address is not null;
 
 create table if not exists users (
   id              uuid primary key default uuid_generate_v4(),

@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-export const TriggerKind = z.enum(["manual", "webhook", "schedule", "email"]);
+export const TriggerKind = z.enum([
+  "manual",
+  "webhook",
+  "schedule",
+  "email",          // Polled Gmail label (existing)
+  "inbound_email",  // Pushed via Postmark/SES into workspace inbox
+  "drive_watch",    // Polled Google Drive folder
+]);
 export type TriggerKind = z.infer<typeof TriggerKind>;
 
 export const ApprovalRule = z.object({
@@ -36,10 +43,14 @@ export const CustomTool = z.object({
 });
 export type CustomTool = z.infer<typeof CustomTool>;
 
+export const BuiltinToolName = z.enum(["document_understand", "browser_use"]);
+export type BuiltinToolName = z.infer<typeof BuiltinToolName>;
+
 export const ToolConfig = z.object({
   connectors: z.array(ConnectorRef).default([]),
   mcp_servers: z.array(McpServerRef).default([]),
   custom_tools: z.array(CustomTool).default([]),
+  builtins: z.array(BuiltinToolName).default([]),
 });
 export type ToolConfig = z.infer<typeof ToolConfig>;
 

@@ -1,0 +1,93 @@
+{
+  "name": "Forward an invoice (any format)",
+  "tagline": "Forward any invoice — PDF, scanned image, weird Excel — to your assistant's inbox. I'll read it and post to QuickBooks.",
+  "description": "Skip the OAuth gauntlet. Each workspace gets its own assistant inbox; forward any vendor invoice (PDF attachment, photo of a paper invoice, scanned receipt) and I'll extract the line items via vision, look up the vendor in QuickBooks, and post a draft bill. Approval required for amounts over $1,000.",
+  "time_saved": "5–10 minutes per invoice (especially scans)",
+  "what_youll_connect": ["QuickBooks", "(use your assistant's inbox — no email account to connect)"],
+  "trigger_kind": "inbound_email",
+  "trigger_config": {},
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "from": { "type": "string" },
+      "subject": { "type": "string" },
+      "body": { "type": "string" },
+      "attachments": { "type": "array" },
+      "attachment_count": { "type": "integer" }
+    }
+  },
+  "tool_config": {
+    "connectors": [{ "slug": "quickbooks" }],
+    "builtins": ["document_understand"],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 40,
+    "budget_usd": 0.75,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": [
+      {
+        "tool": "quickbooks_create_bill",
+        "when": "input.grand_total > 1000",
+        "reason": "Bill total exceeds $1000 — please review before posting"
+      }
+    ]
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": "claude-opus-4-7",
+  "system_prompt_path": "system-prompts/forwarded-invoice-to-quickbooks.md",
+  "test_cases": [
+    {
+      "name": "single PDF invoice attached",
+      "input": {
+        "from": "owner@firm.com",
+        "subject": "Fwd: Invoice from Acme Supplies",
+        "body": "Please process this one. Thanks.",
+        "attachment_count": 1
+      },
+      "rubric": "The agent calls document_understand on attachment 0, gets back vendor + line items + total under $1000, then quickbooks_search_vendor → quickbooks_create_bill (no approval needed). Summary lists 1 bill created."
+    },
+    {
+      "name": "two attachments — one invoice, one logo",
+      "input": {
+        "from": "owner@firm.com",
+        "subject": "Fwd: Invoices",
+        "body": "Two invoices attached.",
+        "attachment_count": 2
+      },
+      "rubric": "The agent calls document_understand on each. The non-invoice attachment returns wrong_document_type; the agent skips it and notes it in the summary. The real invoice is created in QB."
+    },
+    {
+      "name": "scanned image invoice over $1000",
+      "input": {
+        "from": "owner@firm.com",
+        "subject": "Fwd: Big Vendor Invoice",
+        "body": "",
+        "attachment_count": 1
+      },
+      "rubric": "The agent extracts data from the image via document_understand. Total > $1000 trips the approval gate before quickbooks_create_bill is invoked — run pauses with status awaiting_approval. Acceptable that the agent never reaches the summary."
+    },
+    {
+      "name": "credit memo (not a bill)",
+      "input": {
+        "from": "owner@firm.com",
+        "subject": "Fwd: Credit memo",
+        "body": "Not sure what to do with this.",
+        "attachment_count": 1
+      },
+      "rubric": "The agent reads the document and recognizes it's a credit memo, NOT an invoice. Does not call quickbooks_create_bill. The summary tells the bookkeeper to handle the credit manually."
+    },
+    {
+      "name": "no attachments",
+      "input": {
+        "from": "owner@firm.com",
+        "subject": "Fwd: ?",
+        "body": "Just a heads up there's an invoice coming.",
+        "attachment_count": 0
+      },
+      "rubric": "The agent recognizes there's nothing to extract and ends with a brief summary noting no attachments were found. Does not call any QB tools."
+    }
+  ]
+}

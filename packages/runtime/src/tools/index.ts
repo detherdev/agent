@@ -1,16 +1,28 @@
-import type { CustomTool, ToolConfig, ToolDefinition } from "../types.js";
+import type { CustomTool, ToolConfig, ToolDefinition, BuiltinToolName } from "../types.js";
 import { makeHttpTool } from "./http.js";
 import { makeSqlTool } from "./sql.js";
+import { documentUnderstandTool } from "./document_understand.js";
+import { browserUseTool } from "./browser_use.js";
 import { loadMcpTools } from "../mcp.js";
 import { loadConnectorTools } from "../connectors/index.js";
 
-export { makeHttpTool, makeSqlTool };
+export { makeHttpTool, makeSqlTool, documentUnderstandTool, browserUseTool };
+
+const BUILTINS: Record<BuiltinToolName, () => ToolDefinition> = {
+  document_understand: documentUnderstandTool,
+  browser_use: browserUseTool,
+};
 
 export async function buildToolset(config: ToolConfig, workspaceId: string): Promise<ToolDefinition[]> {
   const tools: ToolDefinition[] = [];
 
   for (const ref of config.connectors) {
     tools.push(...loadConnectorTools(ref.slug));
+  }
+
+  for (const name of config.builtins) {
+    const factory = BUILTINS[name];
+    if (factory) tools.push(factory());
   }
 
   for (const t of config.custom_tools) {

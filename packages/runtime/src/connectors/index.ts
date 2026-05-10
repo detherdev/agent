@@ -1,6 +1,10 @@
 import type { ToolDefinition } from "../types.js";
 import { gmailTools } from "./gmail.js";
 import { quickBooksTools } from "./quickbooks.js";
+import { outlookTools } from "./outlook.js";
+import { stripeTools } from "./stripe.js";
+import { slackTools } from "./slack.js";
+import { driveTools } from "./drive.js";
 
 export {
   nangoProxy,
@@ -12,6 +16,10 @@ export {
 const REGISTRY: Record<string, () => ToolDefinition[]> = {
   gmail: gmailTools,
   quickbooks: quickBooksTools,
+  outlook: outlookTools,
+  stripe: stripeTools,
+  slack: slackTools,
+  "google-drive": driveTools,
 };
 
 export function listConnectorSlugs(): string[] {
