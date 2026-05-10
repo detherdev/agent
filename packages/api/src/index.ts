@@ -1,7 +1,12 @@
+// Initialise Sentry BEFORE anything else — instrumentation patches modules at import time.
+import { Sentry } from "./sentry.js";
+
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
+import { query, log } from "runtime";
+import { connection as redisConnection } from "./queue.js";
 
 import { workflowsRouter } from "./routes/workflows.js";
 import { runsRouter } from "./routes/runs.js";
@@ -38,7 +43,34 @@ app.use(
 //                                opaque secret (TODO: hash + per-workflow
 //                                rotating tokens)
 
+// Liveness — cheap. Fly's HTTP check hits this every 15s.
 app.get("/health", (c) => c.json({ ok: true }));
+
+// Readiness — DB + Redis. Failing this takes the VM out of rotation but
+// doesn't restart it. Fly's check hits every 30s.
+app.get("/ready", async (c) => {
+  try {
+    await query("select 1");
+  } catch (err) {
+    log.warn({ err }, "ready check: db unreachable");
+    return c.json({ ready: false, db: false, redis: null, error: (err as Error).message }, 503);
+  }
+  try {
+    await redisConnection.ping();
+  } catch (err) {
+    log.warn({ err }, "ready check: redis unreachable");
+    return c.json({ ready: false, db: true, redis: false, error: (err as Error).message }, 503);
+  }
+  return c.json({ ready: true, db: true, redis: true });
+});
+
+// Surface uncaught errors to Sentry (no-op when DSN is unset).
+app.onError((err, c) => {
+  Sentry.captureException(err);
+  log.error({ err: err.message, stack: err.stack }, "uncaught");
+  return c.json({ error: "internal_error" }, 500);
+});
+
 app.route("/v1/connect/webhook", connectWebhookRouter);
 app.route("/v1/webhooks", webhooksRouter);
 app.route("/v1/webhooks/inbound-email", inboundRouter);

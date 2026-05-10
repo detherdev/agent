@@ -1,3 +1,6 @@
+// Initialise Sentry before any other imports.
+import { Sentry } from "./sentry.js";
+
 import { Worker } from "bullmq";
 import { connection, type RunJob } from "./queue.js";
 import {
@@ -105,6 +108,7 @@ const worker = new Worker<RunJob>(
 
 worker.on("failed", (job, err) => {
   log.error({ jobId: job?.id, err: err.message }, "run job failed");
+  Sentry.captureException(err, { tags: { jobId: job?.id, queue: "runs" } });
 });
 
 worker.on("completed", (job, result) => {

@@ -1,0 +1,84 @@
+# Fly.io app for the API + worker + trigger-worker.
+#
+# One Fly app, three processes. Scale them independently:
+#   fly scale count api=2 worker=1 triggers=1
+#
+# All in YYZ (Toronto) for Canadian data residency. Pair with a Postgres
+# provider in the same region (Supabase Canada Central / Neon Canada / AWS
+# ca-central-1) so app ↔ DB latency stays low.
+
+app = "REPLACE_WITH_FLY_APP_NAME"
+primary_region = "yyz"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "packages/api/Dockerfile"
+
+# Three process groups from the same image; only `api` gets the HTTP service.
+[processes]
+  api = "node packages/api/dist/index.js"
+  worker = "node packages/api/dist/worker.js"
+  triggers = "node packages/api/dist/trigger-worker.js"
+
+# Run migrations before each deploy. If this fails, the new VMs aren't promoted.
+[deploy]
+  release_command = "node packages/api/dist/migrate.js"
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  API_PORT = "3001"
+  LOG_LEVEL = "info"
+  # Provider region pins for the workers (override per-secret as needed):
+  NANGO_HOST = "https://api.nango.dev"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["api"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+# Liveness — process is up. Cheap; runs frequently.
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "15s"
+  method = "GET"
+  path = "/health"
+  protocol = "http"
+  timeout = "5s"
+  processes = ["api"]
+
+# Readiness — DB + Redis reachable. Longer interval, longer timeout.
+# A failing /ready takes the VM out of rotation but doesn't restart it.
+[[http_service.checks]]
+  grace_period = "30s"
+  interval = "30s"
+  method = "GET"
+  path = "/ready"
+  protocol = "http"
+  timeout = "10s"
+  processes = ["api"]
+
+# Resource sizing — start small. Bump via `fly scale memory 1024` etc.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["api"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1024mb"
+  processes = ["worker"]   # Anthropic loops can hold a fair bit of state.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["triggers"]
