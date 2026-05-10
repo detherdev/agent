@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getOrCreateWorkspace } from "@/lib/auth";
 import { listCatalog, listPendingApprovals } from "@/lib/api";
 import { JobCard } from "./JobCard";
@@ -24,19 +25,30 @@ export default async function JobsPage() {
         </p>
       </div>
 
-      {jobs.length === 0 ? (
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 px-6 py-16 text-center text-neutral-500">
-          No jobs available. (Add a pack under <code className="text-neutral-400">packs/</code>.)
-        </div>
-      ) : (
-        <ul className="grid gap-4 sm:grid-cols-2" data-testid="job-list">
-          {jobs.map((j) => (
-            <li key={`${j.pack}/${j.slug}`}>
-              <JobCard job={j} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="grid gap-4 sm:grid-cols-2" data-testid="job-list">
+        {jobs.map((j) => (
+          <li key={`${j.pack}/${j.slug}`}>
+            <JobCard job={j} />
+          </li>
+        ))}
+        <li>
+          <Link
+            href="/jobs/new"
+            className="flex h-full flex-col justify-between rounded-xl border border-dashed border-neutral-700 bg-neutral-900/30 p-5 hover:bg-neutral-900/60"
+          >
+            <div>
+              <h3 className="text-base font-semibold text-neutral-100">Tell me what you need</h3>
+              <p className="mt-2 text-sm text-neutral-400">
+                None of the templates fit? Describe what you'd like me to handle in plain English
+                and I'll set it up with you.
+              </p>
+            </div>
+            <span className="mt-5 inline-block rounded-md border border-neutral-700 px-3 py-2 text-center text-sm text-neutral-200 hover:border-neutral-500">
+              Start a chat →
+            </span>
+          </Link>
+        </li>
+      </ul>
       </main>
     </div>
   );

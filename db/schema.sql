@@ -186,6 +186,22 @@ create table if not exists connections (
 
 create index if not exists connections_workspace_idx on connections(workspace_id) where status = 'active';
 
+-- ===== Spec drafts (Setup Assistant conversations) =====
+
+create table if not exists spec_drafts (
+  id                    uuid primary key default uuid_generate_v4(),
+  workspace_id          uuid not null references workspaces(id) on delete cascade,
+  user_id               uuid not null references users(id) on delete cascade,
+  messages              jsonb not null default '[]'::jsonb,
+  proposed_spec         jsonb,
+  status                text not null default 'drafting' check (status in ('drafting','ready','installed','archived')),
+  installed_workflow_id uuid references workflows(id) on delete set null,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+
+create index if not exists spec_drafts_workspace_idx on spec_drafts(workspace_id, updated_at desc);
+
 -- ===== Per-workflow long-term memory =====
 
 create table if not exists workflow_memory (

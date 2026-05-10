@@ -24,6 +24,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.40.0
+        version: 0.40.1
       '@clerk/backend':
         specifier: ^1.21.6
         version: 1.34.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)

@@ -231,6 +231,93 @@ export async function getRunTurns(ctx: WorkspaceContext, runId: string): Promise
   return (await res.json()) as TurnRow[];
 }
 
+// ===== Setup Assistant (spec drafts) =====
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface SpecDraft {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  messages: unknown[];  // raw Anthropic message array
+  proposed_spec: Record<string, unknown> | null;
+  status: "drafting" | "ready" | "installed" | "archived";
+  installed_workflow_id: string | null;
+  greeting?: string;
+}
+
+export async function startSpecDraft(ctx: WorkspaceContext): Promise<SpecDraft> {
+  const res = await fetch(`${API_URL}/v1/spec-drafts`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+  });
+  if (!res.ok) throw new Error(`startSpecDraft failed: ${res.status}`);
+  return (await res.json()) as SpecDraft;
+}
+
+export async function getSpecDraft(ctx: WorkspaceContext, id: string): Promise<SpecDraft> {
+  const res = await fetch(`${API_URL}/v1/spec-drafts/${id}`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) throw new Error(`getSpecDraft failed: ${res.status}`);
+  return (await res.json()) as SpecDraft;
+}
+
+export async function sendSpecDraftMessage(
+  ctx: WorkspaceContext,
+  id: string,
+  text: string,
+): Promise<{ assistant_message: string; proposed_spec_updated: boolean; draft: SpecDraft }> {
+  const res = await fetch(`${API_URL}/v1/spec-drafts/${id}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`sendSpecDraftMessage failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as {
+    assistant_message: string;
+    proposed_spec_updated: boolean;
+    draft: SpecDraft;
+  };
+}
+
+export async function installSpecDraft(
+  ctx: WorkspaceContext,
+  id: string,
+): Promise<{ workflow_id: string; test_case_count: number }> {
+  const res = await fetch(`${API_URL}/v1/spec-drafts/${id}/install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+  });
+  if (!res.ok) throw new Error(`install failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as { workflow_id: string; test_case_count: number };
+}
+
+export function extractChatMessages(rawMessages: unknown[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const m of rawMessages) {
+    const msg = m as { role: "user" | "assistant"; content: unknown };
+    if (msg.role !== "user" && msg.role !== "assistant") continue;
+    const text = extractText(msg.content);
+    if (text) out.push({ role: msg.role, text });
+  }
+  return out;
+}
+
+function extractText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((b) => typeof b === "object" && b !== null && (b as { type: string }).type === "text")
+    .map((b) => (b as { text: string }).text)
+    .join("\n");
+}
+
 export async function setOnboardingStep(
   ctx: WorkspaceContext,
   step: 0 | 1 | 2 | 3,
