@@ -10,6 +10,7 @@ create extension if not exists "pgcrypto";
 create table if not exists workspaces (
   id           uuid primary key default uuid_generate_v4(),
   name         text not null,
+  onboarding_step smallint not null default 0,  -- 0 welcome, 1 picked, 2 connected, 3 done
   created_at   timestamptz not null default now()
 );
 

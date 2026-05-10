@@ -1,18 +1,21 @@
+import { redirect } from "next/navigation";
+import { getOrCreateWorkspace } from "@/lib/auth";
 import { listPendingApprovals } from "@/lib/api";
 import { ApprovalCard } from "./ApprovalCard";
 
 export const dynamic = "force-dynamic";
 
 export default async function InboxPage() {
-  const items = await listPendingApprovals();
+  const ctx = await getOrCreateWorkspace();
+  if (!ctx) redirect("/sign-in");
+
+  const items = await listPendingApprovals(ctx);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <div className="mb-8 flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Inbox</h1>
-        <span className="text-sm text-neutral-500">
-          {items.length} waiting on you
-        </span>
+        <span className="text-sm text-neutral-500">{items.length} waiting on you</span>
       </div>
 
       {items.length === 0 ? (

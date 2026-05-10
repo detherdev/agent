@@ -1,14 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getOrCreateWorkspace } from "@/lib/auth";
 import { decideApproval } from "@/lib/api";
 
 export async function approve(approvalId: string): Promise<void> {
-  await decideApproval(approvalId, "approve");
+  const ctx = await getOrCreateWorkspace();
+  if (!ctx) throw new Error("not signed in");
+  await decideApproval(ctx, approvalId, "approve");
   revalidatePath("/inbox");
 }
 
 export async function reject(approvalId: string, reason: string): Promise<void> {
-  await decideApproval(approvalId, "reject", reason);
+  const ctx = await getOrCreateWorkspace();
+  if (!ctx) throw new Error("not signed in");
+  await decideApproval(ctx, approvalId, "reject", reason);
   revalidatePath("/inbox");
 }

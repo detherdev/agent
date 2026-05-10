@@ -1,10 +1,15 @@
+import { redirect } from "next/navigation";
+import { getOrCreateWorkspace } from "@/lib/auth";
 import { listCatalog } from "@/lib/api";
 import { JobCard } from "./JobCard";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobsPage() {
-  const jobs = await listCatalog();
+  const ctx = await getOrCreateWorkspace();
+  if (!ctx) redirect("/sign-in");
+
+  const jobs = await listCatalog(ctx);
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">

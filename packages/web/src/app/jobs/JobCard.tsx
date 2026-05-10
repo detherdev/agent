@@ -1,11 +1,19 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { installJob } from "./actions";
 import type { CatalogJob } from "@/lib/api";
 
-export function JobCard({ job }: { job: CatalogJob }) {
+export function JobCard({ job, nextHref }: { job: CatalogJob; nextHref?: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const onClick = () =>
+    startTransition(async () => {
+      await installJob(job.pack, job.slug, !!nextHref);
+      if (nextHref) router.push(nextHref);
+    });
 
   return (
     <div
@@ -21,9 +29,7 @@ export function JobCard({ job }: { job: CatalogJob }) {
             </span>
           )}
         </div>
-        {job.tagline && (
-          <p className="mt-2 text-sm text-neutral-400">{job.tagline}</p>
-        )}
+        {job.tagline && <p className="mt-2 text-sm text-neutral-400">{job.tagline}</p>}
 
         {(job.what_youll_connect?.length ?? 0) > 0 && (
           <div className="mt-4">
@@ -49,7 +55,7 @@ export function JobCard({ job }: { job: CatalogJob }) {
       </div>
 
       <div className="mt-5">
-        {job.installed ? (
+        {job.installed && !nextHref ? (
           <button
             disabled
             className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-500"
@@ -60,10 +66,10 @@ export function JobCard({ job }: { job: CatalogJob }) {
           <button
             disabled={pending}
             data-testid={`install-${job.slug}`}
-            onClick={() => startTransition(() => installJob(job.pack, job.slug))}
+            onClick={onClick}
             className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
           >
-            {pending ? "Adding..." : "Add to my workspace"}
+            {pending ? "Adding..." : nextHref ? "Pick this one" : "Add to my workspace"}
           </button>
         )}
       </div>
