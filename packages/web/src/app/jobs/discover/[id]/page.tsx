@@ -35,7 +35,7 @@ export default async function DiscoverChatPage({ params }: { params: Promise<{ i
 
   return (
     <div className="min-h-screen">
-      <AppHeader pendingCount={pending.length} />
+      <AppHeader pendingCount={pending.length} planTier={ctx.plan_tier} trialEndsAt={ctx.trial_ends_at} />
       <main className="mx-auto max-w-4xl px-6 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Figure out what to automate</h1>

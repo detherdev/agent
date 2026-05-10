@@ -14,7 +14,7 @@ export default async function InboxPage() {
 
   return (
     <div className="min-h-screen">
-      <AppHeader pendingCount={items.length} />
+      <AppHeader pendingCount={items.length} planTier={ctx.plan_tier} trialEndsAt={ctx.trial_ends_at} />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8 flex items-baseline justify-between">

@@ -48,7 +48,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen">
-      <AppHeader pendingCount={pending.length} />
+      <AppHeader pendingCount={pending.length} planTier={ctx.plan_tier} trialEndsAt={ctx.trial_ends_at} />
 
       <main className="mx-auto max-w-3xl px-6 py-8">
         <Link

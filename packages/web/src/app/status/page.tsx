@@ -18,7 +18,7 @@ export default async function StatusPage() {
 
   return (
     <div className="min-h-screen">
-      <AppHeader pendingCount={pending.length} />
+      <AppHeader pendingCount={pending.length} planTier={ctx.plan_tier} trialEndsAt={ctx.trial_ends_at} />
 
       <main className="mx-auto max-w-5xl px-6 py-10">
         <div className="mb-2 text-xs uppercase tracking-wide text-neutral-500">Last 24 hours</div>

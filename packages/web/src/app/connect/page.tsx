@@ -16,7 +16,7 @@ export default async function ConnectPage() {
 
   return (
     <div className="min-h-screen">
-      <AppHeader pendingCount={pending.length} />
+      <AppHeader pendingCount={pending.length} planTier={ctx.plan_tier} trialEndsAt={ctx.trial_ends_at} />
       <main className="mx-auto max-w-2xl px-6 py-10">
         <h1 className="text-2xl font-semibold tracking-tight">Connected accounts</h1>
         <p className="mt-2 text-neutral-400">

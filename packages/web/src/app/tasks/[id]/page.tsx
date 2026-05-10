@@ -41,7 +41,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="min-h-screen">
-      <AppHeader pendingCount={pending.length} />
+      <AppHeader pendingCount={pending.length} planTier={ctx.plan_tier} trialEndsAt={ctx.trial_ends_at} />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Link href="/tasks" className="text-sm text-neutral-500 hover:text-neutral-300">
           ← All tasks
