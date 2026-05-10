@@ -13,7 +13,7 @@ export async function loadTurns(runId: string): Promise<TurnRecord[]> {
             cost_usd, duration_ms
        from turns
       where run_id = $1
-      order by step asc`,
+      order by step asc, created_at asc`,
     [runId],
   );
   return r.rows;

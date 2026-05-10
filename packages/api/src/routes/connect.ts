@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { query, log } from "runtime";
+import * as crypto from "node:crypto";
+import {
+  query,
+  log,
+  fetchNangoConnection,
+  extractProviderMetadata,
+} from "runtime";
 import { requireMatchingWorkspace } from "../middleware/auth.js";
 
 const NANGO_HOST = process.env.NANGO_HOST ?? "https://api.nango.dev";
@@ -10,6 +16,27 @@ function nangoSecret(): string {
   const s = process.env.NANGO_SECRET_KEY;
   if (!s) throw new Error("NANGO_SECRET_KEY not set");
   return s;
+}
+
+/**
+ * HMAC-SHA256(body, NANGO_WEBHOOK_SECRET) — Nango sends the digest as
+ * X-Nango-Signature. Constant-time compare. If the secret isn't configured
+ * we log loudly and reject — never silently allow.
+ */
+function verifyNangoSignature(rawBody: string, signature: string | undefined): boolean {
+  const secret = process.env.NANGO_WEBHOOK_SECRET;
+  if (!secret) {
+    log.error("NANGO_WEBHOOK_SECRET not set — rejecting webhook");
+    return false;
+  }
+  if (!signature) return false;
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  if (expected.length !== signature.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return false;
+  }
 }
 
 // ===== Public: Nango webhook receiver =====
@@ -31,7 +58,20 @@ const WebhookPayload = z
 export const connectWebhookRouter = new Hono();
 
 connectWebhookRouter.post("/", async (c) => {
-  const raw = await c.req.json().catch(() => ({}));
+  const rawBody = await c.req.text();
+  const sig = c.req.header("x-nango-signature") ?? c.req.header("x-hub-signature-256");
+
+  if (!verifyNangoSignature(rawBody, sig)) {
+    log.warn("nango webhook: bad signature");
+    return c.json({ error: "bad signature" }, 401);
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: "bad json" }, 400);
+  }
   const parsed = WebhookPayload.safeParse(raw);
   if (!parsed.success) {
     log.warn({ raw }, "nango webhook: bad shape");
@@ -49,14 +89,29 @@ connectWebhookRouter.post("/", async (c) => {
   if (!workspaceId) return c.json({ ok: true });
 
   if (ev.operation === "creation" || ev.operation === "refresh" || ev.operation === "override") {
+    // Pull the full connection record from Nango so we can stash any
+    // provider-specific metadata our tools need (e.g. QuickBooks realmId
+    // lives in connection_config and won't appear in the webhook payload).
+    let metadata: Record<string, unknown> = {};
+    try {
+      const detail = await fetchNangoConnection(ev.connectionId, ev.providerConfigKey);
+      metadata = extractProviderMetadata(ev.providerConfigKey, detail);
+    } catch (err) {
+      log.warn(
+        { err: (err as Error).message, conn: ev.connectionId },
+        "fetchNangoConnection failed; persisting connection without metadata",
+      );
+    }
+
     await query(
-      `insert into connections (workspace_id, provider, nango_connection_id, status)
-         values ($1, $2, $3, 'active')
+      `insert into connections (workspace_id, provider, nango_connection_id, metadata, status)
+         values ($1, $2, $3, $4, 'active')
        on conflict (workspace_id, provider)
          do update set nango_connection_id = excluded.nango_connection_id,
+                       metadata = excluded.metadata,
                        status = 'active',
                        updated_at = now()`,
-      [workspaceId, ev.providerConfigKey, ev.connectionId],
+      [workspaceId, ev.providerConfigKey, ev.connectionId, JSON.stringify(metadata)],
     );
   } else if (ev.operation === "deletion") {
     await query(

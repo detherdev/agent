@@ -85,10 +85,15 @@ create table if not exists runs (
   cost_usd      numeric(10,4) not null default 0,
   step_count    int not null default 0,
   shadow_mode   boolean not null default false,
+  dedup_key     text,
   started_at    timestamptz,
   finished_at   timestamptz,
   created_at    timestamptz not null default now()
 );
+
+create unique index if not exists runs_workflow_dedup_uniq
+  on runs(workflow_id, dedup_key)
+  where dedup_key is not null;
 
 create index if not exists runs_workflow_status_idx on runs(workflow_id, status);
 create index if not exists runs_workspace_created_idx on runs(workspace_id, created_at desc);

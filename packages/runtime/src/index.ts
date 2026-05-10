@@ -9,6 +9,8 @@ export {
   listConnectorSlugs,
   nangoProxy,
   getConnection,
+  fetchNangoConnection,
+  extractProviderMetadata,
 } from "./connectors/index.js";
 export { query, withTx, getPool } from "./db.js";
 export { log, runLog } from "./trace.js";

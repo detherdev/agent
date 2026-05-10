@@ -13,6 +13,7 @@ export interface ConnectionInfo {
   nango_connection_id: string;
   provider: string;
   display_name: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export async function getConnection(
@@ -20,7 +21,7 @@ export async function getConnection(
   provider: string,
 ): Promise<ConnectionInfo | null> {
   const r = await query<ConnectionInfo>(
-    `select nango_connection_id, provider, display_name
+    `select nango_connection_id, provider, display_name, metadata
        from connections
       where workspace_id = $1 and provider = $2 and status = 'active'
       limit 1`,
@@ -28,6 +29,67 @@ export async function getConnection(
   );
   return r.rows[0] ?? null;
 }
+
+// ===== Nango admin API (server → Nango) =====
+
+export interface NangoConnectionDetails {
+  connection_id: string;
+  provider_config_key: string;
+  connection_config: Record<string, unknown>;  // provider-specific (e.g. { realmId: "..." } for QB)
+  metadata: Record<string, unknown>;
+  end_user?: { id?: string; email?: string };
+}
+
+/**
+ * Fetch the full connection record from Nango. Used right after a Connect
+ * Session completes so we can extract per-provider context like the
+ * QuickBooks realmId (which lives in `connection_config.realmId`).
+ */
+export async function fetchNangoConnection(
+  connectionId: string,
+  providerConfigKey: string,
+): Promise<NangoConnectionDetails> {
+  const url = new URL(`/connection/${encodeURIComponent(connectionId)}`, NANGO_HOST);
+  url.searchParams.set("provider_config_key", providerConfigKey);
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${secret()}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Nango GET /connection failed: ${res.status} ${body}`);
+  }
+  return (await res.json()) as NangoConnectionDetails;
+}
+
+/**
+ * Provider-specific extraction from the full Nango connection record into
+ * the metadata blob we persist on `connections.metadata`. Anything our tools
+ * read at runtime should land here.
+ */
+export function extractProviderMetadata(
+  provider: string,
+  detail: NangoConnectionDetails,
+): Record<string, unknown> {
+  const cc = detail.connection_config ?? {};
+  switch (provider) {
+    case "quickbooks": {
+      const realmId =
+        (typeof cc.realmId === "string" && cc.realmId) ||
+        (typeof cc.realm_id === "string" && cc.realm_id) ||
+        null;
+      return realmId ? { realm_id: realmId } : {};
+    }
+    case "gmail": {
+      const email = typeof cc.email === "string" ? cc.email : undefined;
+      return email ? { email } : {};
+    }
+    default:
+      return {};
+  }
+}
+
+// ===== Proxy =====
 
 export interface ProxyArgs {
   workspaceId: string;

@@ -61,19 +61,14 @@ export async function runAgent(args: RunAgentArgs): Promise<RunAgentResult> {
 }
 
 /**
- * Resume an awaiting_approval run.
- * Strategy: rebuild messages from the turns table up through the last
- * assistant turn (which contains the un-executed tool_use(s)). Execute every
- * tool_use from that turn — using the approved/edited input for the one that
- * tripped the approval, and the original input for any siblings — then append
- * the resulting tool_result block(s) and re-enter the loop.
+ * Resume an awaiting_approval run after the user approves (or edits) the
+ * gated tool call. Loads the approval, applies the approved/edited input as
+ * an override on the matching tool_use_id, and re-enters the loop.
  */
 export async function resumeAfterApproval(
   runId: string,
   workflow: Workflow,
 ): Promise<RunAgentResult> {
-  const log = runLog(runId);
-
   const approval = await loadPendingApproval(runId);
   if (!approval) throw new Error(`no approval found for run ${runId}`);
   if (approval.status === "rejected" || approval.status === "expired") {
@@ -83,7 +78,56 @@ export async function resumeAfterApproval(
     throw new Error(`approval ${approval.id} is still ${approval.status}; not ready to resume`);
   }
 
-  await updateRunStatus(runId, { status: "running" });
+  const turns = await loadTurns(runId);
+  const lastAssistant = lastAssistantTurn(turns);
+  const matchingToolUse = lastAssistant?.toolUses.find(
+    (tu) =>
+      tu.name === approval.pending_tool_name &&
+      deepEqual(tu.input, approval.pending_tool_input),
+  );
+
+  const overrides = new Map<string, unknown>();
+  if (matchingToolUse) {
+    const approvedInput =
+      approval.status === "edited" ? approval.edited_input : approval.pending_tool_input;
+    overrides.set(matchingToolUse.id, approvedInput);
+  }
+
+  return resumeFromTurns(workflow, runId, overrides, "approval");
+}
+
+/**
+ * Resume a run that was crash-stranded mid-loop (the worker died after
+ * persisting some turns but before the run reached a terminal state).
+ * Re-executes any tool_uses from the last assistant turn that don't have
+ * a matching tool turn, then continues the loop.
+ *
+ * Idempotency: tool turns already persisted are reused; only the missing
+ * ones get re-invoked. Side-effecting tools that already ran (and were
+ * persisted) won't run twice.
+ */
+export async function resumeAfterCrash(
+  runId: string,
+  workflow: Workflow,
+): Promise<RunAgentResult> {
+  return resumeFromTurns(workflow, runId, new Map(), "crash");
+}
+
+/**
+ * Shared resume core for both the approval and crash paths. Re-executes
+ * any pending tool_uses (those declared by the last assistant turn but
+ * without a matching tool turn yet), pushes a single user-message
+ * containing all tool_results (already-executed + freshly-executed), and
+ * re-enters the agent loop.
+ */
+async function resumeFromTurns(
+  workflow: Workflow,
+  runId: string,
+  overrides: Map<string, unknown>,
+  reason: "approval" | "crash",
+): Promise<RunAgentResult> {
+  const log = runLog(runId);
+  await updateRunStatus(runId, { status: "running", started_at: new Date() });
 
   const tools = await buildToolset(workflow.tool_config, workflow.workspace_id);
   const toolByName = new Map(tools.map((t) => [t.name, t]));
@@ -91,13 +135,11 @@ export async function resumeAfterApproval(
   const turns = await loadTurns(runId);
   const initialInput = await loadRunInput(runId);
 
-  const { messages, lastAssistantToolUses, step, costUsd } = rebuildMessages(turns, initialInput);
+  const { messages, pendingToolUses, executedToolResults, step, costUsd } = rebuildMessages(
+    turns,
+    initialInput,
+  );
 
-  if (!lastAssistantToolUses || lastAssistantToolUses.length === 0) {
-    throw new Error(`no pending tool_uses found at step ${approval.step}; nothing to resume`);
-  }
-
-  const approvedInput = approval.status === "edited" ? approval.edited_input : approval.pending_tool_input;
   const ctx = {
     run_id: runId,
     workflow_id: workflow.id,
@@ -105,15 +147,14 @@ export async function resumeAfterApproval(
     shadow_mode: workflow.guardrails.shadow_mode,
   };
 
-  const toolResults: ContentBlockParam[] = [];
-  for (const tu of lastAssistantToolUses) {
-    const isApproved =
-      tu.name === approval.pending_tool_name && deepEqual(tu.input, approval.pending_tool_input);
-    const useInput = isApproved ? approvedInput : tu.input;
+  // Execute any tool_uses that didn't run before the pause / crash.
+  const newToolResults: ContentBlockParam[] = [];
+  for (const tu of pendingToolUses) {
+    const useInput = overrides.has(tu.id) ? overrides.get(tu.id) : tu.input;
 
     const tool = toolByName.get(tu.name);
     if (!tool) {
-      toolResults.push(toolResultBlock(tu.id, `Unknown tool: ${tu.name}`, true));
+      newToolResults.push(toolResultBlock(tu.id, `Unknown tool: ${tu.name}`, true));
       continue;
     }
 
@@ -125,7 +166,7 @@ export async function resumeAfterApproval(
     }
 
     const content = workflow.guardrails.redact_pii ? redactPII(res.content) : res.content;
-    toolResults.push(toolResultBlock(tu.id, content, res.is_error));
+    newToolResults.push(toolResultBlock(tu.id, content, res.is_error));
 
     await appendTurn(runId, {
       step,
@@ -137,8 +178,23 @@ export async function resumeAfterApproval(
     });
   }
 
-  messages.push({ role: "user", content: toolResults });
-  log.info({ resumed_step: step, tool_uses: lastAssistantToolUses.length }, "resumed after approval");
+  // Combine executed + freshly-executed tool_results into one user message
+  // — Anthropic's API requires a tool_result for every tool_use in the
+  // preceding assistant message.
+  const combined = [...executedToolResults, ...newToolResults];
+  if (combined.length > 0) {
+    messages.push({ role: "user", content: combined });
+  }
+
+  log.info(
+    {
+      reason,
+      step,
+      pending: pendingToolUses.length,
+      already_executed: executedToolResults.length,
+    },
+    "resumed run",
+  );
 
   return continueLoop({
     workflow,
@@ -149,6 +205,18 @@ export async function resumeAfterApproval(
     costUsd,
     shadowMode: workflow.guardrails.shadow_mode,
   });
+}
+
+function lastAssistantTurn(turns: TurnRecord[]): { step: number; toolUses: ToolUseBlock[] } | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i];
+    if (t && t.role === "assistant") {
+      const content = t.content as Array<TextBlock | ToolUseBlock>;
+      const toolUses = content.filter((b): b is ToolUseBlock => b.type === "tool_use");
+      return { step: t.step, toolUses };
+    }
+  }
+  return null;
 }
 
 interface ContinueArgs {
@@ -291,11 +359,26 @@ async function continueLoop(args: ContinueArgs): Promise<RunAgentResult> {
 
 interface RebuiltState {
   messages: MessageParam[];
-  lastAssistantToolUses: ToolUseBlock[] | null;
+  /** tool_uses from the last assistant turn that don't yet have a tool turn */
+  pendingToolUses: ToolUseBlock[];
+  /** tool_results for the last assistant turn that ARE already persisted */
+  executedToolResults: ToolResultBlockParam[];
   step: number;
   costUsd: number;
 }
 
+/**
+ * Reconstruct the Anthropic-shaped message array from persisted turns,
+ * splitting out the last step's tool_uses into "already executed" vs
+ * "pending" so the caller can finish a partial step before re-entering
+ * the loop.
+ *
+ * Earlier (fully-completed) steps are pushed inline. The last step's
+ * tool_results are deliberately *not* pushed — the caller assembles them
+ * from `executedToolResults` plus any fresh executions, then pushes a
+ * single combined user message (Anthropic's API requires all tool_uses
+ * to have matching tool_results in the same message).
+ */
 function rebuildMessages(turns: TurnRecord[], initialInput: unknown): RebuiltState {
   const messages: MessageParam[] = [
     { role: "user", content: typeof initialInput === "string" ? initialInput : JSON.stringify(initialInput) },
@@ -311,33 +394,48 @@ function rebuildMessages(turns: TurnRecord[], initialInput: unknown): RebuiltSta
 
   const sortedSteps = [...stepMap.keys()].sort((a, b) => a - b);
   let costUsd = 0;
-  let lastAssistantToolUses: ToolUseBlock[] | null = null;
+  let lastAssistantToolUses: ToolUseBlock[] = [];
+  let lastStepToolTurns: TurnRecord[] = [];
 
-  for (const stepNum of sortedSteps) {
+  for (let i = 0; i < sortedSteps.length; i++) {
+    const stepNum = sortedSteps[i]!;
     const bucket = stepMap.get(stepNum)!;
+    const isLast = i === sortedSteps.length - 1;
+
     if (bucket.assistant) {
-      const content = bucket.assistant.content as ToolUseBlock[] | TextBlock[];
+      const content = bucket.assistant.content as Array<TextBlock | ToolUseBlock>;
       messages.push({ role: "assistant", content: content as never });
       costUsd += Number(bucket.assistant.cost_usd ?? 0);
-      const toolUses = (content as Array<TextBlock | ToolUseBlock>).filter(
-        (b): b is ToolUseBlock => b.type === "tool_use",
-      );
-      lastAssistantToolUses = toolUses.length ? toolUses : null;
+      if (isLast) {
+        lastAssistantToolUses = content.filter((b): b is ToolUseBlock => b.type === "tool_use");
+      }
     }
+
     if (bucket.tools.length > 0) {
-      const toolResults: ToolResultBlockParam[] = bucket.tools.map((t) => {
-        const c = t.content as { tool_use_id: string; content: string };
-        return { type: "tool_result", tool_use_id: c.tool_use_id, content: c.content };
-      });
-      messages.push({ role: "user", content: toolResults });
-      // If we have results for this step, the tool_uses already executed —
-      // they don't need re-execution on resume.
-      lastAssistantToolUses = null;
+      if (isLast) {
+        // Hold these aside; caller will combine with any freshly-executed
+        // tool_results into one user message.
+        lastStepToolTurns = bucket.tools;
+      } else {
+        const toolResults: ToolResultBlockParam[] = bucket.tools.map((t) => toolTurnAsResult(t));
+        messages.push({ role: "user", content: toolResults });
+      }
     }
   }
 
+  const executedIds = new Set(
+    lastStepToolTurns.map((t) => (t.content as { tool_use_id: string }).tool_use_id),
+  );
+  const pendingToolUses = lastAssistantToolUses.filter((tu) => !executedIds.has(tu.id));
+  const executedToolResults = lastStepToolTurns.map(toolTurnAsResult);
+
   const lastStep = sortedSteps[sortedSteps.length - 1] ?? 0;
-  return { messages, lastAssistantToolUses, step: lastStep, costUsd };
+  return { messages, pendingToolUses, executedToolResults, step: lastStep, costUsd };
+}
+
+function toolTurnAsResult(t: TurnRecord): ToolResultBlockParam {
+  const c = t.content as { tool_use_id: string; content: string };
+  return { type: "tool_result", tool_use_id: c.tool_use_id, content: c.content };
 }
 
 async function loadRunInput(runId: string): Promise<unknown> {

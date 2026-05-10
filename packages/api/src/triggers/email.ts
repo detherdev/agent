@@ -7,7 +7,6 @@ interface EmailWorkflow {
   version: number;
   trigger_config: { label?: string; query?: string };
   last_polled_at: Date | null;
-  trigger_state: { last_seen_message_ids?: string[] };
 }
 
 interface GmailListResponse {
@@ -28,8 +27,10 @@ interface GmailMessageResponse {
 
 /**
  * Tick once: for every active email-triggered workflow, poll the connected
- * Gmail account for messages newer than last_polled_at that match the
- * configured label/query. Enqueue one run per new message.
+ * Gmail account for messages newer than last_polled_at. Insert one run per
+ * new message with dedup_key = "gmail:<message_id>". The unique index on
+ * (workflow_id, dedup_key) means a duplicate trigger fire is a 0-row INSERT
+ * — no double-processing even across worker restarts.
  *
  * First-time bootstrap: when last_polled_at is null we set it to "now"
  * without backfilling — Gmail history isn't useful as input for an
@@ -38,7 +39,7 @@ interface GmailMessageResponse {
 export async function emailTick(): Promise<void> {
   const now = new Date();
   const r = await query<EmailWorkflow>(
-    `select id, workspace_id, version, trigger_config, last_polled_at, trigger_state
+    `select id, workspace_id, version, trigger_config, last_polled_at
        from workflows
       where trigger_kind = 'email' and archived = false`,
     [],
@@ -81,12 +82,10 @@ async function pollOne(w: EmailWorkflow, now: Date): Promise<void> {
 
   const data = list.data as GmailListResponse;
   const messages = data.messages ?? [];
-  const seenSet = new Set(w.trigger_state.last_seen_message_ids ?? []);
-
-  let newSeen: string[] = [];
 
   for (const m of messages) {
-    if (seenSet.has(m.id)) continue;
+    const dedupKey = `gmail:${m.id}`;
+
     const detailRes = await nangoProxy({
       workspaceId: w.workspace_id,
       provider: "gmail",
@@ -98,27 +97,29 @@ async function pollOne(w: EmailWorkflow, now: Date): Promise<void> {
     const detail = detailRes.data as GmailMessageResponse;
 
     const input = simplifyMessage(detail);
+
+    // ON CONFLICT DO NOTHING + RETURNING gives us back zero rows when the
+    // dedup_key already exists. No row → no enqueue → no duplicate run.
     const ins = await query<{ id: string }>(
-      `insert into runs (workflow_id, workspace_id, workflow_version, trigger_kind, input)
-         values ($1,$2,$3,'email',$4)
+      `insert into runs (workflow_id, workspace_id, workflow_version, trigger_kind, input, dedup_key)
+         values ($1,$2,$3,'email',$4,$5)
+       on conflict (workflow_id, dedup_key) where dedup_key is not null
+         do nothing
        returning id`,
-      [w.id, w.workspace_id, w.version, JSON.stringify(input)],
+      [w.id, w.workspace_id, w.version, JSON.stringify(input), dedupKey],
     );
+
+    if (ins.rows.length === 0) {
+      log.info({ workflow: w.id, message: m.id }, "email already processed, skipping");
+      continue;
+    }
+
     const runId = ins.rows[0]!.id;
     await runsQueue.add("run", { runId, workflowId: w.id });
     log.info({ workflow: w.id, run: runId, message: m.id }, "email trigger fire");
-
-    newSeen.push(m.id);
   }
 
-  // Keep a sliding window of the last 200 ids so we don't refire the same
-  // messages if Gmail's `after:` returns one already-processed message
-  // due to second-resolution rounding.
-  const merged = [...seenSet, ...newSeen].slice(-200);
-  await query(
-    `update workflows set last_polled_at = $1, trigger_state = $2 where id = $3`,
-    [now, JSON.stringify({ ...w.trigger_state, last_seen_message_ids: merged }), w.id],
-  );
+  await query(`update workflows set last_polled_at = $1 where id = $2`, [now, w.id]);
 }
 
 function simplifyMessage(detail: GmailMessageResponse): {
