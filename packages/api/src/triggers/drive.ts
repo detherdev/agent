@@ -1,5 +1,6 @@
 import { query, log, nangoProxy, getConnection } from "runtime";
 import { runsQueue } from "../queue.js";
+import { checkPlanLimits, incrementRunCount } from "../services/usage-meter.js";
 
 interface DriveWorkflow {
   id: string;
@@ -54,6 +55,15 @@ async function pollOne(w: DriveWorkflow, now: Date): Promise<void> {
 
   if (!w.last_polled_at) {
     await query(`update workflows set last_polled_at = $1 where id = $2`, [now, w.id]);
+    return;
+  }
+
+  const check = await checkPlanLimits(w.workspace_id);
+  if (!check.ok) {
+    log.info(
+      { workflow: w.id, workspace: w.workspace_id, reason: check.reason },
+      "drive trigger skipped: plan limit",
+    );
     return;
   }
 
@@ -125,6 +135,7 @@ async function pollOne(w: DriveWorkflow, now: Date): Promise<void> {
     if (ins.rows.length === 0) continue;
     const runId = ins.rows[0]!.id;
     await runsQueue.add("run", { runId, workflowId: w.id });
+    await incrementRunCount(w.workspace_id);
     log.info({ workflow: w.id, run: runId, file: f.id }, "drive_watch fire");
   }
 

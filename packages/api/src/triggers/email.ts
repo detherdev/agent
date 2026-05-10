@@ -1,5 +1,6 @@
 import { query, log, nangoProxy, getConnection } from "runtime";
 import { runsQueue } from "../queue.js";
+import { checkPlanLimits, incrementRunCount } from "../services/usage-meter.js";
 
 interface EmailWorkflow {
   id: string;
@@ -63,6 +64,18 @@ async function pollOne(w: EmailWorkflow, now: Date): Promise<void> {
     return;
   }
 
+  // Plan check up-front. If the workspace is over its cap, skip the
+  // entire poll cycle for this workflow — but don't advance last_polled_at
+  // so we'll catch up on the messages once the cap rolls over.
+  const check = await checkPlanLimits(w.workspace_id);
+  if (!check.ok) {
+    log.info(
+      { workflow: w.id, workspace: w.workspace_id, reason: check.reason },
+      "email trigger skipped: plan limit",
+    );
+    return;
+  }
+
   const sinceSec = Math.floor(w.last_polled_at.getTime() / 1000);
   const labelClause = w.trigger_config.label ? `label:${w.trigger_config.label} ` : "";
   const extra = w.trigger_config.query ? ` ${w.trigger_config.query}` : "";
@@ -116,6 +129,7 @@ async function pollOne(w: EmailWorkflow, now: Date): Promise<void> {
 
     const runId = ins.rows[0]!.id;
     await runsQueue.add("run", { runId, workflowId: w.id });
+    await incrementRunCount(w.workspace_id);
     log.info({ workflow: w.id, run: runId, message: m.id }, "email trigger fire");
   }
 

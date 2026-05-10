@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { query, withTx } from "runtime";
+import { query, withTx, TRIAL_DURATION_DAYS, type PlanTier } from "runtime";
 import { requireWorkspace } from "../middleware/auth.js";
+import { loadUsageSnapshot } from "../services/usage-meter.js";
 
 const BootstrapBody = z.object({
   email: z.string().email(),
@@ -15,6 +16,15 @@ interface MeResponse {
   workspace_name: string;
   onboarding_step: number;
   inbox_address: string | null;
+  plan_tier: PlanTier;
+  trial_ends_at: string | null;
+  usage: {
+    runs_used: number;
+    runs_cap: number;
+    cost_used: number;
+    cost_cap: number;
+    period_end: string;
+  } | null;
   is_new: boolean;
 }
 
@@ -63,8 +73,15 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
     }
 
     let wsRow = (
-      await client.query<{ id: string; name: string; onboarding_step: number; inbox_address: string | null }>(
-        `select w.id, w.name, w.onboarding_step, w.inbox_address
+      await client.query<{
+        id: string;
+        name: string;
+        onboarding_step: number;
+        inbox_address: string | null;
+        plan_tier: PlanTier;
+        trial_ends_at: Date | null;
+      }>(
+        `select w.id, w.name, w.onboarding_step, w.inbox_address, w.plan_tier, w.trial_ends_at
            from workspaces w
            join memberships m on m.workspace_id = w.id
           where m.user_id = $1 and m.role = 'owner'
@@ -77,15 +94,19 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
     if (!wsRow) {
       const name = body.workspace_name ?? deriveName(body.email);
       const inbox = generateInboxAddress();
+      const trialEnds = new Date(Date.now() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
       const r = await client.query<{
         id: string;
         name: string;
         onboarding_step: number;
         inbox_address: string | null;
+        plan_tier: PlanTier;
+        trial_ends_at: Date | null;
       }>(
-        `insert into workspaces (name, inbox_address) values ($1, $2)
-           returning id, name, onboarding_step, inbox_address`,
-        [name, inbox],
+        `insert into workspaces (name, inbox_address, plan_tier, trial_ends_at)
+           values ($1, $2, 'trial', $3)
+           returning id, name, onboarding_step, inbox_address, plan_tier, trial_ends_at`,
+        [name, inbox, trialEnds],
       );
       wsRow = r.rows[0]!;
       await client.query(
@@ -106,12 +127,25 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
     return { userRow, wsRow, isNew };
   });
 
+  const usage = await loadUsageSnapshot(result.wsRow.id);
+
   const out: MeResponse = {
     user_id: result.userRow!.id,
     workspace_id: result.wsRow.id,
     workspace_name: result.wsRow.name,
     onboarding_step: result.wsRow.onboarding_step,
     inbox_address: result.wsRow.inbox_address,
+    plan_tier: result.wsRow.plan_tier,
+    trial_ends_at: result.wsRow.trial_ends_at ? result.wsRow.trial_ends_at.toISOString() : null,
+    usage: usage
+      ? {
+          runs_used: usage.runs_used,
+          runs_cap: usage.runs_cap,
+          cost_used: usage.cost_used,
+          cost_cap: usage.cost_cap,
+          period_end: usage.period_end.toISOString(),
+        }
+      : null,
     is_new: result.isNew,
   };
   return c.json(out);

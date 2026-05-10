@@ -13,6 +13,7 @@ import {
   type TaskRow,
 } from "runtime";
 import { runsQueue } from "../queue.js";
+import { checkPlanLimits, incrementRunCount } from "./usage-meter.js";
 
 /**
  * Task orchestrator tick.
@@ -155,6 +156,17 @@ async function beginWorkflowPhase(
   task: TaskRow,
   allPhases: TaskPhaseRow[],
 ): Promise<void> {
+  // Plan check before firing a run. If over cap, retry the phase later via
+  // failOrRetryPhase (counts against retry budget) — gives the user a clear
+  // signal in the task detail page and avoids silently stalling.
+  const check = await checkPlanLimits(task.workspace_id);
+  if (!check.ok) {
+    log.info(
+      { task: task.id, phase: phase.id, reason: check.reason },
+      "task phase deferred: plan limit",
+    );
+    return;
+  }
   // Build the run input: phase's static input + the outputs of every prior
   // completed phase (so the workflow can reference them).
   const priorOutputs = allPhases
@@ -186,6 +198,7 @@ async function beginWorkflowPhase(
   );
   const runId = ins.rows[0]!.id;
   await runsQueue.add("run", { runId, workflowId: wf.id });
+  await incrementRunCount(task.workspace_id);
   await markPhaseRunning(phase.id, runId);
   log.info({ task: task.id, phase: phase.id, run: runId }, "task phase started");
 }

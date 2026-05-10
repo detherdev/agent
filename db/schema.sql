@@ -10,13 +10,36 @@ create extension if not exists "pgcrypto";
 create table if not exists workspaces (
   id              uuid primary key default uuid_generate_v4(),
   name            text not null,
-  onboarding_step smallint not null default 0,  -- 0 welcome, 1 picked, 2 connected, 3 done
-  inbox_address   text,                          -- workspace-scoped hosted email inbox
+  onboarding_step smallint not null default 0,
+  inbox_address   text,
+  plan_tier       text not null default 'trial' check (plan_tier in ('trial','starter','pro','enterprise')),
+  trial_ends_at   timestamptz,
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  current_period_start   timestamptz,
+  current_period_end     timestamptz,
   created_at      timestamptz not null default now()
 );
 
 create unique index if not exists workspaces_inbox_address_uniq
   on workspaces(inbox_address) where inbox_address is not null;
+create unique index if not exists workspaces_stripe_customer_idx
+  on workspaces(stripe_customer_id) where stripe_customer_id is not null;
+
+-- ===== Billing usage counters =====
+
+create table if not exists usage_counters (
+  workspace_id  uuid not null references workspaces(id) on delete cascade,
+  period_start  timestamptz not null,
+  period_end    timestamptz not null,
+  run_count     int not null default 0,
+  cost_usd      numeric(12, 6) not null default 0,
+  updated_at    timestamptz not null default now(),
+  primary key (workspace_id, period_start)
+);
+
+create index if not exists usage_counters_lookup_idx
+  on usage_counters(workspace_id, period_end desc);
 
 create table if not exists users (
   id              uuid primary key default uuid_generate_v4(),

@@ -1,6 +1,7 @@
 import cronParser from "cron-parser";
 import { withTx, log } from "runtime";
 import { runsQueue } from "../queue.js";
+import { checkPlanLimits, incrementRunCount } from "../services/usage-meter.js";
 
 interface ScheduleWorkflow {
   id: string;
@@ -37,7 +38,7 @@ export async function scheduleTick(): Promise<void> {
         for update skip locked`,
     );
 
-    const due: Array<{ id: string; runId: string }> = [];
+    const due: Array<{ id: string; runId: string; workspace_id: string }> = [];
 
     for (const w of r.rows) {
       const cron = w.trigger_config?.cron;
@@ -55,6 +56,19 @@ export async function scheduleTick(): Promise<void> {
       }
 
       if (nextFire > now) continue;
+
+      // Plan check before we even insert the run row. If the workspace is
+      // over its cap, we silently skip this fire — last_fired_at stays put
+      // so we'll try again on the next tick (giving the user a chance to
+      // upgrade or wait for the period to roll).
+      const check = await checkPlanLimits(w.workspace_id);
+      if (!check.ok) {
+        log.info(
+          { workflow: w.id, workspace: w.workspace_id, reason: check.reason },
+          "schedule trigger skipped: plan limit",
+        );
+        continue;
+      }
 
       // Round to the minute so a 60s tick that fires twice within the same
       // minute (clock skew, restart) only produces one run row.
@@ -85,7 +99,7 @@ export async function scheduleTick(): Promise<void> {
 
       const runId = ins.rows[0]!.id;
       await client.query(`update workflows set last_fired_at = $1 where id = $2`, [nextFire, w.id]);
-      due.push({ id: w.id, runId });
+      due.push({ id: w.id, runId, workspace_id: w.workspace_id });
     }
 
     return due;
@@ -94,6 +108,7 @@ export async function scheduleTick(): Promise<void> {
   // Enqueue after the tx commits. If we crash here, the reaper recovers.
   for (const d of enqueues) {
     await runsQueue.add("run", { runId: d.runId, workflowId: d.id });
+    await incrementRunCount(d.workspace_id);
     log.info({ workflow: d.id, run: d.runId }, "schedule fire");
   }
 }

@@ -10,6 +10,7 @@ import {
   ToolConfig,
   log,
 } from "runtime";
+import { incrementCost } from "./services/usage-meter.js";
 
 const worker = new Worker<RunJob>(
   "runs",
@@ -72,21 +73,32 @@ const worker = new Worker<RunJob>(
     //   resume=true        → user approved a paused tool call
     //   has turns, !resume → reaper re-enqueued a crash-stranded run
     //   no turns           → fresh run
+    let result;
     if (resume) {
       log.info({ runId, mode: "approval-resume" }, "worker handling job");
-      return await resumeAfterApproval(runId, workflow);
-    }
-    if (turnCount > 0) {
+      result = await resumeAfterApproval(runId, workflow);
+    } else if (turnCount > 0) {
       log.info({ runId, mode: "crash-resume", turns: turnCount }, "worker handling job");
-      return await resumeAfterCrash(runId, workflow);
+      result = await resumeAfterCrash(runId, workflow);
+    } else {
+      log.info({ runId, mode: "fresh" }, "worker handling job");
+      result = await runAgent({
+        workflow,
+        runId,
+        input: row.input,
+        shadowMode: row.shadow_mode,
+      });
     }
-    log.info({ runId, mode: "fresh" }, "worker handling job");
-    return await runAgent({
-      workflow,
-      runId,
-      input: row.input,
-      shadowMode: row.shadow_mode,
-    });
+
+    // Roll the realized cost of this run into the workspace's usage counter.
+    // The pre-run check used "spent so far"; this updates it for the next run.
+    if (result?.cost_usd && result.cost_usd > 0) {
+      await incrementCost(workflow.workspace_id, result.cost_usd).catch((err) => {
+        log.error({ err, runId }, "incrementCost failed");
+      });
+    }
+
+    return result;
   },
   { connection, concurrency: Number(process.env.WORKER_CONCURRENCY ?? 4) },
 );

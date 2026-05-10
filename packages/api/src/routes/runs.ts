@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { query } from "runtime";
 import { runsQueue } from "../queue.js";
+import { checkPlanLimits, incrementRunCount } from "../services/usage-meter.js";
 
 const StartRun = z.object({
   workflow_id: z.string().uuid(),
@@ -24,6 +25,11 @@ runsRouter.post("/", zValidator("json", StartRun), async (c) => {
   if (!row) return c.json({ error: "workflow not found" }, 404);
   if (row.workspace_id !== workspaceId) return c.json({ error: "forbidden" }, 403);
 
+  const check = await checkPlanLimits(workspaceId);
+  if (!check.ok) {
+    return c.json({ error: "plan_limit", reason: check.reason, usage: check.usage }, 402);
+  }
+
   const ins = await query<{ id: string }>(
     `insert into runs (workflow_id, workspace_id, workflow_version, trigger_kind, input, shadow_mode)
      values ($1,$2,$3,'manual',$4,$5)
@@ -33,6 +39,7 @@ runsRouter.post("/", zValidator("json", StartRun), async (c) => {
   const runId = ins.rows[0]!.id;
 
   await runsQueue.add("run", { runId, workflowId: body.workflow_id });
+  await incrementRunCount(workspaceId);
   return c.json({ run_id: runId, status: "queued" }, 202);
 });
 

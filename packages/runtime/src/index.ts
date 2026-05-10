@@ -2,6 +2,7 @@ export * from "./types.js";
 export * from "./agent.js";
 export * from "./guardrails.js";
 export * from "./pricing.js";
+export * from "./billing.js";
 export { buildToolset, makeHttpTool, makeSqlTool } from "./tools/index.js";
 export { loadMcpTools } from "./mcp.js";
 export {

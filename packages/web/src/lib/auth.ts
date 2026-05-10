@@ -2,11 +2,25 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
 
+export type PlanTier = "trial" | "starter" | "pro" | "enterprise";
+
+export interface UsageSnapshot {
+  runs_used: number;
+  runs_cap: number;
+  cost_used: number;
+  cost_cap: number;
+  period_end: string;
+}
+
 export interface WorkspaceContext {
   user_id: string;
   workspace_id: string;
   workspace_name: string;
   onboarding_step: number;
+  inbox_address?: string | null;
+  plan_tier: PlanTier;
+  trial_ends_at: string | null;
+  usage: UsageSnapshot | null;
   is_new: boolean;
   clerk_user_id: string;
   email: string;

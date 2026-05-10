@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { query, log } from "runtime";
 import { runsQueue } from "../queue.js";
+import { checkPlanLimits, incrementRunCount } from "../services/usage-meter.js";
 
 const MAX_ATTACHMENT_BYTES = Number(process.env.INBOUND_MAX_ATTACHMENT_BYTES ?? 20 * 1024 * 1024);
 
@@ -89,6 +90,15 @@ inboundRouter.post("/", async (c) => {
   const messageId = payload.MessageID ?? `${recipient}-${payload.Date ?? Date.now()}`;
   const dedupKey = `inbound:${messageId}`;
 
+  // Plan check once per workspace — same workspace, same cap for all
+  // workflows. If over cap, accept the webhook (don't let Postmark retry
+  // forever) but log that we skipped.
+  const check = await checkPlanLimits(workspace.id);
+  if (!check.ok) {
+    log.warn({ workspace: workspace.id, reason: check.reason }, "inbound_email: plan limit reached, skipping");
+    return c.json({ ok: true, skipped: "plan_limit", reason: check.reason });
+  }
+
   let enqueued = 0;
   for (const wf of workflows.rows) {
     const ins = await query<{ id: string }>(
@@ -102,6 +112,7 @@ inboundRouter.post("/", async (c) => {
     if (ins.rows.length === 0) continue;
     const runId = ins.rows[0]!.id;
     await runsQueue.add("run", { runId, workflowId: wf.id });
+    await incrementRunCount(workspace.id);
     enqueued += 1;
     log.info({ workspace: workspace.id, workflow: wf.id, run: runId, messageId }, "inbound_email fire");
   }
