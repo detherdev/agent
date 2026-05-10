@@ -15,10 +15,11 @@
     }
   },
   "tool_config": {
-    "mcp_servers": [
+    "connectors": [
       { "slug": "gmail" },
       { "slug": "quickbooks" }
     ],
+    "mcp_servers": [],
     "custom_tools": []
   },
   "guardrails": {

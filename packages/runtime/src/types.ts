@@ -23,6 +23,10 @@ export const McpServerRef = z.object({
   slug: z.string(),
 });
 
+export const ConnectorRef = z.object({
+  slug: z.string(),
+});
+
 export const CustomTool = z.object({
   name: z.string(),
   description: z.string(),
@@ -33,6 +37,7 @@ export const CustomTool = z.object({
 export type CustomTool = z.infer<typeof CustomTool>;
 
 export const ToolConfig = z.object({
+  connectors: z.array(ConnectorRef).default([]),
   mcp_servers: z.array(McpServerRef).default([]),
   custom_tools: z.array(CustomTool).default([]),
 });

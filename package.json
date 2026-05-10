@@ -14,7 +14,11 @@
     "dev:web": "pnpm --filter web dev",
     "dev:worker": "pnpm --filter api worker",
     "evals": "pnpm --filter evals run",
-    "db:migrate": "psql \"$DATABASE_URL\" -f db/schema.sql"
+    "db:migrate": "psql \"$DATABASE_URL\" -f db/schema.sql",
+    "pack:install": "tsx scripts/install-pack.ts"
+  },
+  "dependencies": {
+    "runtime": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

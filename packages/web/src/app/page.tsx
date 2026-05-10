@@ -1,17 +1,21 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-24">
-      <h1 className="text-4xl font-semibold tracking-tight">Agent Workflow Platform</h1>
+      <h1 className="text-4xl font-semibold tracking-tight">Your assistant</h1>
       <p className="mt-4 text-neutral-400">
-        Each workflow is a Claude agent loop with tools, memory, guardrails, test cases, and an
-        approval queue. Builder UI ships in phase 2.
+        It handles the work; you stay in the loop on anything that matters.
       </p>
-      <ul className="mt-10 space-y-2 text-sm text-neutral-300">
-        <li>POST /v1/workflows — create</li>
-        <li>POST /v1/runs — start a run</li>
-        <li>GET /v1/runs/:id/turns — inspect a run</li>
-        <li>GET /v1/approvals?workspace_id=... — pending approvals</li>
-      </ul>
+      <div className="mt-10 grid gap-3">
+        <Link
+          href="/inbox"
+          className="rounded-xl border border-neutral-800 bg-neutral-900/50 px-5 py-4 hover:bg-neutral-900"
+        >
+          <div className="text-base font-medium">Inbox</div>
+          <div className="text-sm text-neutral-500">Approve or reject anything waiting on you.</div>
+        </Link>
+      </div>
     </main>
   );
 }

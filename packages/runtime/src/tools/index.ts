@@ -2,11 +2,16 @@ import type { CustomTool, ToolConfig, ToolDefinition } from "../types.js";
 import { makeHttpTool } from "./http.js";
 import { makeSqlTool } from "./sql.js";
 import { loadMcpTools } from "../mcp.js";
+import { loadConnectorTools } from "../connectors/index.js";
 
 export { makeHttpTool, makeSqlTool };
 
 export async function buildToolset(config: ToolConfig, workspaceId: string): Promise<ToolDefinition[]> {
   const tools: ToolDefinition[] = [];
+
+  for (const ref of config.connectors) {
+    tools.push(...loadConnectorTools(ref.slug));
+  }
 
   for (const t of config.custom_tools) {
     tools.push(buildCustomTool(t));
