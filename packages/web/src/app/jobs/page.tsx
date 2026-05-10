@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getOrCreateWorkspace } from "@/lib/auth";
-import { listCatalog } from "@/lib/api";
+import { listCatalog, listPendingApprovals } from "@/lib/api";
 import { JobCard } from "./JobCard";
+import { AppHeader } from "@/components/AppHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -9,10 +10,12 @@ export default async function JobsPage() {
   const ctx = await getOrCreateWorkspace();
   if (!ctx) redirect("/sign-in");
 
-  const jobs = await listCatalog(ctx);
+  const [jobs, pending] = await Promise.all([listCatalog(ctx), listPendingApprovals(ctx)]);
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-12">
+    <div className="min-h-screen">
+      <AppHeader pendingCount={pending.length} />
+      <main className="mx-auto max-w-4xl px-6 py-10">
       <div className="mb-10">
         <h1 className="text-3xl font-semibold tracking-tight">What should I handle?</h1>
         <p className="mt-2 text-neutral-400">
@@ -34,6 +37,7 @@ export default async function JobsPage() {
           ))}
         </ul>
       )}
-    </main>
+      </main>
+    </div>
   );
 }

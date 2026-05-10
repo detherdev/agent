@@ -36,6 +36,39 @@ runsRouter.post("/", zValidator("json", StartRun), async (c) => {
   return c.json({ run_id: runId, status: "queued" }, 202);
 });
 
+runsRouter.get("/", async (c) => {
+  const workspaceId = c.get("workspace_id");
+  const workflowId = c.req.query("workflow_id");
+  const status = c.req.query("status");
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+
+  const params: unknown[] = [workspaceId];
+  const conds: string[] = ["r.workspace_id = $1"];
+  if (workflowId) {
+    params.push(workflowId);
+    conds.push(`r.workflow_id = $${params.length}`);
+  }
+  if (status) {
+    params.push(status);
+    conds.push(`r.status = $${params.length}`);
+  }
+  params.push(limit);
+  const limitParam = `$${params.length}`;
+
+  const r = await query(
+    `select r.id, r.workflow_id, r.status, r.trigger_kind, r.cost_usd, r.step_count,
+            r.created_at, r.started_at, r.finished_at, r.error,
+            w.name as workflow_name
+       from runs r
+       join workflows w on w.id = r.workflow_id
+      where ${conds.join(" and ")}
+      order by r.created_at desc
+      limit ${limitParam}`,
+    params,
+  );
+  return c.json(r.rows);
+});
+
 runsRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const workspaceId = c.get("workspace_id");
