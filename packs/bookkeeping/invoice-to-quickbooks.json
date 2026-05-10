@@ -1,0 +1,96 @@
+{
+  "name": "Invoice → QuickBooks",
+  "trigger_kind": "email",
+  "trigger_config": {
+    "label": "to-bookkeeping",
+    "match": { "has_attachment_or_invoice_keyword": true }
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "from": { "type": "string" },
+      "subject": { "type": "string" },
+      "body": { "type": "string" },
+      "attachments": { "type": "array" }
+    }
+  },
+  "tool_config": {
+    "mcp_servers": [
+      { "slug": "gmail" },
+      { "slug": "quickbooks" }
+    ],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 30,
+    "budget_usd": 0.5,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": [
+      {
+        "tool": "quickbooks_create_bill",
+        "when": "input.total_amount > 1000",
+        "reason": "Bill total exceeds $1000 — requires human approval"
+      }
+    ]
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": "claude-opus-4-7",
+  "system_prompt_path": "system-prompts/invoice-to-quickbooks.md",
+  "test_cases": [
+    {
+      "name": "normal invoice",
+      "input": {
+        "from": "billing@acmesupplies.com",
+        "subject": "Invoice INV-1042",
+        "body": "Please find attached invoice INV-1042 for $487.50, due net-30."
+      },
+      "rubric": "The agent extracts the vendor (Acme Supplies), invoice number INV-1042, total $487.50, and creates a QuickBooks bill draft. It replies to the vendor confirming receipt. It does NOT request human approval (under $1000)."
+    },
+    {
+      "name": "missing line items",
+      "input": {
+        "from": "ar@vendorco.com",
+        "subject": "Invoice 2025-887",
+        "body": "Total due: $312.00 by 2026-06-15. (No line items.)"
+      },
+      "rubric": "The agent records the bill but flags the missing line items in its summary so a bookkeeper can review."
+    },
+    {
+      "name": "foreign currency",
+      "input": {
+        "from": "billing@parisco.fr",
+        "subject": "Facture 2026-44",
+        "body": "Montant total: 850 EUR, échéance 2026-06-30."
+      },
+      "rubric": "The agent records the bill in EUR (not converted), and notes the currency clearly in its summary."
+    },
+    {
+      "name": "duplicate",
+      "input": {
+        "from": "billing@acmesupplies.com",
+        "subject": "Invoice INV-1042 (resend)",
+        "body": "Resending INV-1042 for $487.50 in case the prior email was missed."
+      },
+      "rubric": "The agent looks up the existing bill before creating a new one, and either skips creation or flags the duplicate explicitly rather than silently double-recording."
+    },
+    {
+      "name": "not an invoice",
+      "input": {
+        "from": "newsletter@vendorco.com",
+        "subject": "Our Q2 product roadmap",
+        "body": "Read about what we're building this quarter..."
+      },
+      "rubric": "The agent recognizes this is not an invoice, stops without calling QuickBooks tools, and outputs a message starting with 'NOT_AN_INVOICE'."
+    },
+    {
+      "name": "over $1000 (approval gate)",
+      "input": {
+        "from": "billing@bigvendor.com",
+        "subject": "Invoice BV-7700",
+        "body": "Invoice BV-7700 for $4,250.00, due net-15."
+      },
+      "rubric": "The agent extracts the data and proceeds toward creating the bill. It is acceptable that the run pauses with status awaiting_approval before quickbooks_create_bill is invoked — the platform's approval gate is doing its job."
+    }
+  ]
+}
