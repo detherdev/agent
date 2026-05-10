@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { approve, reject } from "./actions";
 import type { PendingApproval } from "@/lib/api";
 
@@ -9,13 +10,27 @@ export function ApprovalCard({ approval }: { approval: PendingApproval }) {
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  const summary = describeAction(approval.pending_tool_name, approval.pending_tool_input);
+  const isTaskPhase = !!approval.task_phase_id;
+  const summary = isTaskPhase
+    ? `Task phase: ${approval.phase_name ?? "unnamed"}`
+    : describeAction(approval.pending_tool_name, approval.pending_tool_input);
 
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-neutral-200">{summary}</p>
+          {isTaskPhase && approval.task_name && (
+            <p className="mt-1 text-xs text-neutral-500">
+              in task{" "}
+              <Link
+                href={`/tasks/${approval.task_id}`}
+                className="text-neutral-400 underline hover:text-neutral-200"
+              >
+                {approval.task_name}
+              </Link>
+            </p>
+          )}
           <p className="mt-1 text-xs text-neutral-500">{approval.reason}</p>
         </div>
         <span className="shrink-0 rounded-full bg-amber-950 px-2 py-0.5 text-xs text-amber-200">
@@ -23,14 +38,16 @@ export function ApprovalCard({ approval }: { approval: PendingApproval }) {
         </span>
       </div>
 
-      <details className="mt-3">
-        <summary className="cursor-pointer text-xs text-neutral-500 hover:text-neutral-300">
-          See exactly what it'll do
-        </summary>
-        <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-neutral-950 p-3 text-xs text-neutral-400">
-          {JSON.stringify(approval.pending_tool_input, null, 2)}
-        </pre>
-      </details>
+      {!isTaskPhase && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-neutral-500 hover:text-neutral-300">
+            See exactly what it'll do
+          </summary>
+          <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-neutral-950 p-3 text-xs text-neutral-400">
+            {JSON.stringify(approval.pending_tool_input, null, 2)}
+          </pre>
+        </details>
+      )}
 
       {!showReject ? (
         <div className="mt-4 flex gap-2">

@@ -132,18 +132,23 @@ create index if not exists turns_run_step_idx on turns(run_id, step, created_at)
 
 create table if not exists approvals (
   id            uuid primary key default uuid_generate_v4(),
-  run_id        uuid not null references runs(id) on delete cascade,
+  run_id        uuid references runs(id) on delete cascade,
+  task_phase_id uuid,  -- references task_phases(id); FK added after that table is declared below
   workspace_id  uuid not null references workspaces(id) on delete cascade,
-  step          int not null,
-  reason        text not null,                  -- which guardrail tripped
-  pending_tool_name text not null,
-  pending_tool_input jsonb not null,
+  step          int not null default 0,
+  reason        text not null,                  -- which guardrail tripped / human gate
+  pending_tool_name text not null default '',
+  pending_tool_input jsonb not null default '{}'::jsonb,
   status        text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'edited', 'expired')),
   decided_by    uuid references users(id),
   decided_at    timestamptz,
   edited_input  jsonb,
   reject_reason text,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  constraint approvals_subject_check check (
+    (run_id is not null and task_phase_id is null) or
+    (run_id is null and task_phase_id is not null)
+  )
 );
 
 create index if not exists approvals_workspace_status_idx on approvals(workspace_id, status);
@@ -203,6 +208,68 @@ create table if not exists spec_drafts (
 );
 
 create index if not exists spec_drafts_workspace_idx on spec_drafts(workspace_id, updated_at desc);
+
+-- ===== Tasks (long-running, multi-phase workflows) =====
+
+create table if not exists tasks (
+  id              uuid primary key default uuid_generate_v4(),
+  workspace_id    uuid not null references workspaces(id) on delete cascade,
+  template_slug   text,
+  name            text not null,
+  status          text not null default 'pending' check (status in (
+                    'pending','running','awaiting_human','succeeded','failed','cancelled'
+                  )),
+  state           jsonb not null default '{}'::jsonb,
+  input           jsonb not null default '{}'::jsonb,
+  result          jsonb,
+  error           text,
+  created_at      timestamptz not null default now(),
+  started_at      timestamptz,
+  finished_at     timestamptz
+);
+
+create index if not exists tasks_workspace_status_idx on tasks(workspace_id, status, created_at desc);
+create index if not exists tasks_running_idx on tasks(status) where status in ('pending','running','awaiting_human');
+
+create table if not exists task_phases (
+  id                  uuid primary key default uuid_generate_v4(),
+  task_id             uuid not null references tasks(id) on delete cascade,
+  order_idx           int not null,
+  name                text not null,
+  workflow_id         uuid references workflows(id) on delete set null,
+  human_gate          boolean not null default false,
+  human_instructions  text,
+  depends_on          jsonb not null default '[]'::jsonb,
+  not_before          timestamptz,
+  status              text not null default 'pending' check (status in (
+                        'pending','ready','running','awaiting_human','succeeded','failed','skipped','cancelled'
+                      )),
+  run_id              uuid references runs(id) on delete set null,
+  input               jsonb,
+  output              jsonb,
+  error               text,
+  created_at          timestamptz not null default now(),
+  started_at          timestamptz,
+  finished_at         timestamptz,
+  unique (task_id, order_idx)
+);
+
+create index if not exists task_phases_task_idx on task_phases(task_id, order_idx);
+create index if not exists task_phases_status_idx on task_phases(status) where status in ('pending','ready','running','awaiting_human');
+
+-- Now that task_phases exists, retro-fit the FK from approvals.task_phase_id.
+do $$ begin
+  if not exists (
+    select 1 from information_schema.table_constraints
+    where constraint_name = 'approvals_task_phase_id_fkey'
+  ) then
+    alter table approvals
+      add constraint approvals_task_phase_id_fkey
+      foreign key (task_phase_id) references task_phases(id) on delete cascade;
+  end if;
+end $$;
+
+create index if not exists approvals_task_phase_idx on approvals(task_phase_id) where task_phase_id is not null;
 
 -- ===== Per-workflow long-term memory =====
 

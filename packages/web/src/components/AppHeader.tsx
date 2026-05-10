@@ -4,6 +4,7 @@ import { UserButton } from "@clerk/nextjs";
 const NAV = [
   { href: "/inbox", label: "Inbox" },
   { href: "/status", label: "Status" },
+  { href: "/tasks", label: "Tasks" },
   { href: "/runs", label: "Runs" },
   { href: "/jobs", label: "Jobs" },
   { href: "/connect", label: "Accounts" },

@@ -4,12 +4,119 @@ const API_URL = process.env.API_URL ?? "http://localhost:3001";
 
 export interface PendingApproval {
   id: string;
-  run_id: string;
+  run_id: string | null;
+  task_phase_id: string | null;
   step: number;
   reason: string;
   pending_tool_name: string;
   pending_tool_input: Record<string, unknown>;
   created_at: string;
+  phase_name?: string | null;
+  task_id?: string | null;
+  task_name?: string | null;
+}
+
+export interface TaskListRow {
+  id: string;
+  template_slug: string | null;
+  name: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface TaskPhaseRow {
+  id: string;
+  order_idx: number;
+  name: string;
+  workflow_id: string | null;
+  human_gate: boolean;
+  human_instructions: string | null;
+  status: string;
+  run_id: string | null;
+  output: unknown;
+  error: string | null;
+  not_before: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface TaskDetail {
+  task: {
+    id: string;
+    template_slug: string | null;
+    name: string;
+    status: string;
+    input: Record<string, unknown>;
+    state: Record<string, unknown>;
+    result: unknown;
+    error: string | null;
+    created_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+  };
+  phases: TaskPhaseRow[];
+}
+
+export interface TaskTemplateSummary {
+  slug: string;
+  name: string;
+  tagline?: string;
+  description?: string;
+  input_schema: Record<string, unknown>;
+  phase_count: number;
+  phases: Array<{ name: string; human_gate: boolean; workflow_name?: string }>;
+}
+
+export async function listTaskTemplates(ctx: WorkspaceContext): Promise<TaskTemplateSummary[]> {
+  const res = await fetch(`${API_URL}/v1/tasks/templates`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) throw new Error(`templates failed: ${res.status}`);
+  return (await res.json()) as TaskTemplateSummary[];
+}
+
+export async function startTask(
+  ctx: WorkspaceContext,
+  template_slug: string,
+  input: Record<string, unknown>,
+  name?: string,
+): Promise<{ task_id: string; phase_count: number }> {
+  const res = await fetch(`${API_URL}/v1/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+    body: JSON.stringify({ template_slug, input, name }),
+  });
+  if (!res.ok) throw new Error(`start task failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as { task_id: string; phase_count: number };
+}
+
+export async function listTasks(ctx: WorkspaceContext): Promise<TaskListRow[]> {
+  const res = await fetch(`${API_URL}/v1/tasks`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) throw new Error(`tasks list failed: ${res.status}`);
+  return (await res.json()) as TaskListRow[];
+}
+
+export async function getTask(ctx: WorkspaceContext, id: string): Promise<TaskDetail> {
+  const res = await fetch(`${API_URL}/v1/tasks/${id}`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) throw new Error(`get task failed: ${res.status}`);
+  return (await res.json()) as TaskDetail;
+}
+
+export async function cancelTask(ctx: WorkspaceContext, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/v1/tasks/${id}/cancel`, {
+    method: "POST",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) throw new Error(`cancel failed: ${res.status}`);
 }
 
 export async function listPendingApprovals(ctx: WorkspaceContext): Promise<PendingApproval[]> {

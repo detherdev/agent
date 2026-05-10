@@ -33,3 +33,22 @@ export {
   type PackJobFile,
   type InstallResult,
 } from "./install.js";
+export {
+  listTaskTemplates,
+  readTaskTemplate,
+  startTaskFromTemplate,
+  loadActiveTasks,
+  loadTask,
+  loadTaskPhases,
+  markPhaseRunning,
+  markPhaseAwaitingHuman,
+  markPhaseSucceeded,
+  markPhaseFailed,
+  updateTaskStatus,
+  type TaskTemplate,
+  type PhaseTemplate,
+  type StartTaskArgs,
+  type StartTaskResult,
+  type TaskRow,
+  type TaskPhaseRow,
+} from "./tasks.js";

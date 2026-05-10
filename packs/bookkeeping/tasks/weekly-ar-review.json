@@ -1,0 +1,27 @@
+{
+  "name": "Weekly AR review",
+  "tagline": "Chase overdue invoices, then check the drafts before they go out next week.",
+  "description": "Each Monday I scan for overdue invoices and draft chase emails (using the Chase late payments workflow). Then I park the drafts for you to review on Tuesday. Anything you OK goes out; anything you reject I'll re-draft.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "week_of": { "type": "string", "description": "ISO date (the Monday of the week)" }
+    }
+  },
+  "phases": [
+    {
+      "name": "Find and draft chase emails",
+      "workflow_name": "Chase late payments",
+      "input": {
+        "as_of_today_only": true
+      }
+    },
+    {
+      "name": "Review chase drafts",
+      "human_gate": true,
+      "depends_on": [0],
+      "human_instructions": "Open the chase emails in your drafts folder, look them over, and approve when you're happy. If anything looks off, reject and tell me why — I'll re-draft.",
+      "not_before_hours": 24
+    }
+  ]
+}
