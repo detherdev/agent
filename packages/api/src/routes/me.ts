@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { query, withTx } from "runtime";
+import { requireWorkspace } from "../middleware/auth.js";
 
 const BootstrapBody = z.object({
-  clerk_user_id: z.string().min(1),
   email: z.string().email(),
   workspace_name: z.string().min(1).optional(),
 });
@@ -20,19 +20,23 @@ interface MeResponse {
 export const meRouter = new Hono();
 
 /**
- * Idempotent: ensures the Clerk user has a User row, an owned Workspace,
- * and a Membership. Returns identifiers and onboarding progress so the
- * web app can decide where to land.
+ * Bootstrap (idempotent): ensures the verified Clerk user has a User row,
+ * an owned Workspace, and a Membership. Returns identifiers + onboarding
+ * progress so the web app can decide where to land.
+ *
+ * The clerk_user_id comes from the verified JWT (c.get('clerk_user_id')),
+ * NOT from the body — clients can't claim a different identity.
  */
 meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
   const body = c.req.valid("json");
+  const clerkUserId = c.get("clerk_user_id");
 
   const result = await withTx(async (client) => {
-    // User upsert by clerk_user_id.
     let isNew = false;
+
     let userRow = (
       await client.query<{ id: string }>(`select id from users where clerk_user_id = $1`, [
-        body.clerk_user_id,
+        clerkUserId,
       ])
     ).rows[0];
 
@@ -41,12 +45,11 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
       userRow = (
         await client.query<{ id: string }>(
           `insert into users (clerk_user_id, email) values ($1, $2) returning id`,
-          [body.clerk_user_id, body.email],
+          [clerkUserId, body.email],
         )
       ).rows[0]!;
     }
 
-    // Workspace: pick the first owned workspace if any, else create.
     let wsRow = (
       await client.query<{ id: string; name: string; onboarding_step: number }>(
         `select w.id, w.name, w.onboarding_step
@@ -87,14 +90,14 @@ meRouter.post("/", zValidator("json", BootstrapBody), async (c) => {
   return c.json(out);
 });
 
-const StepBody = z.object({
-  workspace_id: z.string().uuid(),
-  step: z.number().int().min(0).max(3),
-});
+const StepBody = z.object({ step: z.number().int().min(0).max(3) });
 
-meRouter.post("/onboarding", zValidator("json", StepBody), async (c) => {
-  const { workspace_id, step } = c.req.valid("json");
-  await query(`update workspaces set onboarding_step = $1 where id = $2`, [step, workspace_id]);
+// Onboarding-step bumps need a real workspace, so layer the workspace
+// middleware on this sub-route.
+meRouter.post("/onboarding", requireWorkspace, zValidator("json", StepBody), async (c) => {
+  const { step } = c.req.valid("json");
+  const workspaceId = c.get("workspace_id");
+  await query(`update workspaces set onboarding_step = $1 where id = $2`, [step, workspaceId]);
   return c.json({ ok: true });
 });
 

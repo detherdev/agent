@@ -8,20 +8,18 @@ const Decision = z.object({
   decision: z.enum(["approve", "reject", "edit"]),
   edited_input: z.unknown().optional(),
   reject_reason: z.string().optional(),
-  user_id: z.string().uuid(),
 });
 
 export const approvalsRouter = new Hono();
 
 approvalsRouter.get("/", async (c) => {
-  const ws = c.req.query("workspace_id");
-  if (!ws) return c.json({ error: "workspace_id required" }, 400);
+  const workspaceId = c.get("workspace_id");
   const r = await query(
     `select id, run_id, step, reason, pending_tool_name, pending_tool_input, created_at
        from approvals
       where workspace_id = $1 and status = 'pending'
       order by created_at asc`,
-    [ws],
+    [workspaceId],
   );
   return c.json(r.rows);
 });
@@ -29,6 +27,8 @@ approvalsRouter.get("/", async (c) => {
 approvalsRouter.post("/:id/decide", zValidator("json", Decision), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
+  const workspaceId = c.get("workspace_id");
+  const userId = c.get("user_id");
 
   const status =
     body.decision === "approve" ? "approved" : body.decision === "edit" ? "edited" : "rejected";
@@ -41,14 +41,15 @@ approvalsRouter.post("/:id/decide", zValidator("json", Decision), async (c) => {
               decided_at = now(),
               edited_input = $3,
               reject_reason = $4
-        where id = $5 and status = 'pending'
+        where id = $5 and workspace_id = $6 and status = 'pending'
         returning run_id`,
       [
         status,
-        body.user_id,
+        userId,
         body.edited_input ? JSON.stringify(body.edited_input) : null,
         body.reject_reason ?? null,
         id,
+        workspaceId,
       ],
     );
     return r.rows[0];

@@ -1,15 +1,16 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
+import { cors } from "hono/cors";
+
 import { workflowsRouter } from "./routes/workflows.js";
 import { runsRouter } from "./routes/runs.js";
 import { approvalsRouter } from "./routes/approvals.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { catalogRouter } from "./routes/catalog.js";
 import { meRouter } from "./routes/me.js";
-import { connectRouter } from "./routes/connect.js";
-import { workspaceContext } from "./middleware/workspace.js";
-import { cors } from "hono/cors";
+import { connectRouter, connectWebhookRouter } from "./routes/connect.js";
+import { verifyClerkJwt, requireWorkspace } from "./middleware/auth.js";
 
 const app = new Hono();
 
@@ -19,18 +20,43 @@ app.use(
   cors({
     origin: process.env.WEB_URL ?? "http://localhost:3000",
     credentials: true,
-    allowHeaders: ["Content-Type", "Authorization", "X-Workspace-Id", "X-User-Id"],
+    allowHeaders: ["Content-Type", "Authorization"],
   }),
 );
-app.use("*", workspaceContext);
+
+// ===== Public routes (no auth) =====
+//
+// Each handles its own authenticity:
+//   /health                      anyone
+//   /v1/connect/webhook          Nango webhook — verify HMAC sig (TODO)
+//   /v1/webhooks/:workflow_id    external trigger; uses workflow_id as
+//                                opaque secret (TODO: hash + per-workflow
+//                                rotating tokens)
+
 app.get("/health", (c) => c.json({ ok: true }));
-app.route("/v1/me", meRouter);
-app.route("/v1/connect", connectRouter);
-app.route("/v1/workflows", workflowsRouter);
-app.route("/v1/runs", runsRouter);
-app.route("/v1/approvals", approvalsRouter);
+app.route("/v1/connect/webhook", connectWebhookRouter);
 app.route("/v1/webhooks", webhooksRouter);
-app.route("/v1/catalog", catalogRouter);
+
+// ===== Bootstrap (JWT only — workspace may not exist yet) =====
+
+const meApp = new Hono();
+meApp.use("*", verifyClerkJwt);
+meApp.route("/", meRouter);
+app.route("/v1/me", meApp);
+
+// ===== Authenticated + workspace-scoped routes =====
+
+const auth = new Hono();
+auth.use("*", verifyClerkJwt);
+auth.use("*", requireWorkspace);
+
+auth.route("/connect", connectRouter);
+auth.route("/workflows", workflowsRouter);
+auth.route("/runs", runsRouter);
+auth.route("/approvals", approvalsRouter);
+auth.route("/catalog", catalogRouter);
+
+app.route("/v1", auth);
 
 const port = Number(process.env.API_PORT ?? 3001);
 serve({ fetch: app.fetch, port });

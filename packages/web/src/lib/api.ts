@@ -1,4 +1,4 @@
-import { workspaceHeaders, type WorkspaceContext } from "./auth";
+import { authHeaders, type WorkspaceContext } from "./auth";
 
 const API_URL = process.env.API_URL ?? "http://localhost:3001";
 
@@ -13,10 +13,10 @@ export interface PendingApproval {
 }
 
 export async function listPendingApprovals(ctx: WorkspaceContext): Promise<PendingApproval[]> {
-  const res = await fetch(
-    `${API_URL}/v1/approvals?workspace_id=${ctx.workspace_id}`,
-    { cache: "no-store", headers: workspaceHeaders(ctx) },
-  );
+  const res = await fetch(`${API_URL}/v1/approvals`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
   if (!res.ok) throw new Error(`approvals fetch failed: ${res.status}`);
   return (await res.json()) as PendingApproval[];
 }
@@ -29,12 +29,8 @@ export async function decideApproval(
 ): Promise<void> {
   const res = await fetch(`${API_URL}/v1/approvals/${approvalId}/decide`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...workspaceHeaders(ctx) },
-    body: JSON.stringify({
-      decision,
-      user_id: ctx.user_id,
-      reject_reason: rejectReason,
-    }),
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+    body: JSON.stringify({ decision, reject_reason: rejectReason }),
   });
   if (!res.ok) throw new Error(`approval decide failed: ${res.status} ${await res.text()}`);
 }
@@ -54,10 +50,10 @@ export interface CatalogJob {
 }
 
 export async function listCatalog(ctx: WorkspaceContext): Promise<CatalogJob[]> {
-  const res = await fetch(
-    `${API_URL}/v1/catalog?workspace_id=${ctx.workspace_id}`,
-    { cache: "no-store", headers: workspaceHeaders(ctx) },
-  );
+  const res = await fetch(`${API_URL}/v1/catalog`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
   if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`);
   const body = (await res.json()) as { jobs: CatalogJob[] };
   return body.jobs;
@@ -70,8 +66,8 @@ export async function installCatalogJob(
 ): Promise<void> {
   const res = await fetch(`${API_URL}/v1/catalog/install`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...workspaceHeaders(ctx) },
-    body: JSON.stringify({ workspace_id: ctx.workspace_id, pack, slug }),
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+    body: JSON.stringify({ pack, slug }),
   });
   if (!res.ok && res.status !== 409) {
     throw new Error(`install failed: ${res.status} ${await res.text()}`);
@@ -84,10 +80,10 @@ export interface RequiredProvider {
 }
 
 export async function listRequiredProviders(ctx: WorkspaceContext): Promise<RequiredProvider[]> {
-  const res = await fetch(
-    `${API_URL}/v1/connect/required?workspace_id=${ctx.workspace_id}`,
-    { cache: "no-store", headers: workspaceHeaders(ctx) },
-  );
+  const res = await fetch(`${API_URL}/v1/connect/required`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
   if (!res.ok) throw new Error(`required-providers fetch failed: ${res.status}`);
   return (await res.json()) as RequiredProvider[];
 }
@@ -98,7 +94,7 @@ export async function createConnectSession(
 ): Promise<{ session_token: string; expires_at: string }> {
   const res = await fetch(`${API_URL}/v1/connect/session`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...workspaceHeaders(ctx) },
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
     body: JSON.stringify({
       workspace_id: ctx.workspace_id,
       end_user_id: ctx.clerk_user_id,
@@ -116,8 +112,8 @@ export async function setOnboardingStep(
 ): Promise<void> {
   const res = await fetch(`${API_URL}/v1/me/onboarding`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...workspaceHeaders(ctx) },
-    body: JSON.stringify({ workspace_id: ctx.workspace_id, step }),
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+    body: JSON.stringify({ step }),
   });
   if (!res.ok) throw new Error(`onboarding step failed: ${res.status}`);
 }

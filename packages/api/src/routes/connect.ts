@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { query, log } from "runtime";
+import { requireMatchingWorkspace } from "../middleware/auth.js";
 
 const NANGO_HOST = process.env.NANGO_HOST ?? "https://api.nango.dev";
 
@@ -11,67 +12,10 @@ function nangoSecret(): string {
   return s;
 }
 
-export const connectRouter = new Hono();
-
-// ===== Session creation =====
+// ===== Public: Nango webhook receiver =====
 //
-// Frontend asks for a short-lived token to open Nango's hosted Connect UI
-// for a specific list of providers, scoped to a workspace + end-user.
-
-const SessionBody = z.object({
-  workspace_id: z.string().uuid(),
-  end_user_id: z.string().min(1),     // Clerk user_id; opaque to Nango
-  end_user_email: z.string().email().optional(),
-  providers: z.array(z.string()).min(1),
-});
-
-connectRouter.post("/session", zValidator("json", SessionBody), async (c) => {
-  const body = c.req.valid("json");
-
-  // Deterministic connection_id per (workspace, provider) so a re-connect
-  // updates the existing row instead of creating a duplicate.
-  const allowed = body.providers.map((p) => ({
-    provider_config_key: p,
-    connection_id: `${body.workspace_id}:${p}`,
-  }));
-
-  const res = await fetch(`${NANGO_HOST}/connect/sessions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${nangoSecret()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      end_user: { id: body.end_user_id, email: body.end_user_email },
-      allowed_integrations: body.providers,
-      // Nango supports per-provider connection_id overrides via
-      // `integrations_config_defaults`; we send them so our deterministic
-      // ids stick.
-      integrations_config_defaults: Object.fromEntries(
-        allowed.map((a) => [a.provider_config_key, { connection_id: a.connection_id }]),
-      ),
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    log.error({ status: res.status, body: text }, "nango create session failed");
-    return c.json({ error: "nango session creation failed", detail: text }, 500);
-  }
-
-  const json = (await res.json()) as { data: { token: string; expires_at: string } };
-  return c.json({
-    session_token: json.data.token,
-    expires_at: json.data.expires_at,
-    expected_connection_ids: allowed,
-  });
-});
-
-// ===== Webhook receiver =====
-//
-// Nango fires this when a connection is created, updated, or revoked.
-// Payload shape (post-OAuth success):
-//   { type: 'auth', operation: 'creation', connectionId, providerConfigKey, ... }
+// Mounted before auth. TODO: verify Nango HMAC signature here using
+// NANGO_WEBHOOK_SECRET so untrusted callers can't forge connection events.
 
 const WebhookPayload = z
   .object({
@@ -84,8 +28,9 @@ const WebhookPayload = z
   })
   .passthrough();
 
-connectRouter.post("/webhook", async (c) => {
-  // Optional: verify HMAC signature here using NANGO_WEBHOOK_SECRET.
+export const connectWebhookRouter = new Hono();
+
+connectWebhookRouter.post("/", async (c) => {
   const raw = await c.req.json().catch(() => ({}));
   const parsed = WebhookPayload.safeParse(raw);
   if (!parsed.success) {
@@ -99,7 +44,7 @@ connectRouter.post("/webhook", async (c) => {
     return c.json({ ok: true });
   }
 
-  // connection_id is `<workspace_id>:<provider>` per our session creation.
+  // connection_id is `<workspace_id>:<provider>` per session creation.
   const [workspaceId] = ev.connectionId.split(":");
   if (!workspaceId) return c.json({ ok: true });
 
@@ -124,12 +69,59 @@ connectRouter.post("/webhook", async (c) => {
   return c.json({ ok: true });
 });
 
-// ===== Connection state for the UI =====
+// ===== Authenticated: session creation, required-providers, current-state =====
+
+export const connectRouter = new Hono();
+
+const SessionBody = z.object({
+  workspace_id: z.string().uuid(),
+  end_user_id: z.string().min(1),
+  end_user_email: z.string().email().optional(),
+  providers: z.array(z.string()).min(1),
+});
+
+connectRouter.post("/session", zValidator("json", SessionBody), async (c) => {
+  const body = c.req.valid("json");
+  const ctxWs = c.get("workspace_id");
+  const match = requireMatchingWorkspace({ workspace_id: ctxWs }, body.workspace_id);
+  if (!match.ok) return c.json({ error: match.reason }, 403);
+
+  const allowed = body.providers.map((p) => ({
+    provider_config_key: p,
+    connection_id: `${body.workspace_id}:${p}`,
+  }));
+
+  const res = await fetch(`${NANGO_HOST}/connect/sessions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${nangoSecret()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      end_user: { id: body.end_user_id, email: body.end_user_email },
+      allowed_integrations: body.providers,
+      integrations_config_defaults: Object.fromEntries(
+        allowed.map((a) => [a.provider_config_key, { connection_id: a.connection_id }]),
+      ),
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    log.error({ status: res.status, body: text }, "nango create session failed");
+    return c.json({ error: "nango session creation failed", detail: text }, 500);
+  }
+
+  const json = (await res.json()) as { data: { token: string; expires_at: string } };
+  return c.json({
+    session_token: json.data.token,
+    expires_at: json.data.expires_at,
+    expected_connection_ids: allowed,
+  });
+});
 
 connectRouter.get("/", async (c) => {
-  const workspaceId = c.req.query("workspace_id");
-  if (!workspaceId) return c.json({ error: "workspace_id required" }, 400);
-
+  const workspaceId = c.get("workspace_id");
   const r = await query<{
     provider: string;
     display_name: string | null;
@@ -145,12 +137,8 @@ connectRouter.get("/", async (c) => {
   return c.json(r.rows);
 });
 
-// Required-providers helper: union of connectors used by this workspace's
-// non-archived workflows. The /connect page uses this to decide which
-// tiles to show.
 connectRouter.get("/required", async (c) => {
-  const workspaceId = c.req.query("workspace_id");
-  if (!workspaceId) return c.json({ error: "workspace_id required" }, 400);
+  const workspaceId = c.get("workspace_id");
 
   const r = await query<{ tool_config: { connectors?: Array<{ slug: string }> } }>(
     `select tool_config from workflows where workspace_id = $1 and archived = false`,
@@ -168,7 +156,5 @@ connectRouter.get("/required", async (c) => {
   );
   const active = new Set(conns.rows.filter((r) => r.status === "active").map((r) => r.provider));
 
-  return c.json(
-    [...required].map((p) => ({ provider: p, connected: active.has(p) })),
-  );
+  return c.json([...required].map((p) => ({ provider: p, connected: active.has(p) })));
 });

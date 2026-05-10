@@ -16,21 +16,19 @@ import {
 const PACKS_DIR = process.env.PACKS_DIR ?? resolve(process.cwd(), "packs");
 
 interface CatalogJob extends PackJobMetadata {
-  pack: string;             // pack slug (folder name)
-  installed: boolean;       // for the requesting workspace
+  pack: string;
+  installed: boolean;
   installed_workflow_id?: string;
 }
 
 export const catalogRouter = new Hono();
 
 catalogRouter.get("/", async (c) => {
-  const workspaceId = c.req.query("workspace_id");
-  if (!workspaceId) return c.json({ error: "workspace_id required" }, 400);
+  const workspaceId = c.get("workspace_id");
 
   const packs = await listPacks();
   const jobs: CatalogJob[] = [];
 
-  // Pull installed-workflow rows once for this workspace; build a name → id map.
   const installedRows = await query<{ id: string; name: string }>(
     `select id, name from workflows where workspace_id = $1 and archived = false`,
     [workspaceId],
@@ -49,23 +47,23 @@ catalogRouter.get("/", async (c) => {
 });
 
 const InstallBody = z.object({
-  workspace_id: z.string().uuid(),
   pack: z.string().min(1),
   slug: z.string().min(1),
 });
 
 catalogRouter.post("/install", zValidator("json", InstallBody), async (c) => {
-  const { workspace_id, pack, slug } = c.req.valid("json");
+  const { pack, slug } = c.req.valid("json");
+  const workspaceId = c.get("workspace_id");
 
-  await ensureWorkspace(workspace_id);
+  await ensureWorkspace(workspaceId);
 
   const job = await readPackJob(join(PACKS_DIR, pack), slug);
 
-  if (await isJobInstalled(workspace_id, job.name)) {
+  if (await isJobInstalled(workspaceId, job.name)) {
     return c.json({ error: "already installed", job_name: job.name }, 409);
   }
 
-  const result = await installWorkflow({ workspaceId: workspace_id, ...job.spec });
+  const result = await installWorkflow({ workspaceId, ...job.spec });
   return c.json(
     {
       workflow_id: result.workflow_id,

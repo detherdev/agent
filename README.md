@@ -55,8 +55,14 @@ pnpm verify                      # apply schema + install bookkeeping pack
 
 pnpm dev:api                     # API on :3001
 pnpm dev:web                     # web on :3000
-pnpm dev:worker                  # agent worker (separate terminal)
+pnpm dev:worker                  # agent worker (consumes runs queue)
+pnpm dev:triggers                # schedule + email trigger producer
 ```
+
+`dev:worker` and `dev:triggers` are separate processes on purpose: the
+worker runs agent loops (long-lived, restartable per run); the trigger
+worker decides *when* to enqueue runs (cron tick + Gmail poll). In prod
+you'd run them as separate Fly machines or k8s deployments.
 
 ## User journey (what a new SMB sees)
 

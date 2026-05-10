@@ -10,15 +10,23 @@ export interface WorkspaceContext {
   is_new: boolean;
   clerk_user_id: string;
   email: string;
+  token: string;
 }
 
 /**
  * Server-side: ensure the signed-in Clerk user has a User row + Workspace +
  * Membership in our Postgres. Idempotent — safe to call on every request.
+ *
+ * The Clerk JWT is fetched via `auth().getToken()` and forwarded to the API
+ * as `Authorization: Bearer <jwt>`; the API verifies the signature + sub
+ * before touching the DB.
  */
 export async function getOrCreateWorkspace(): Promise<WorkspaceContext | null> {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) return null;
+
+  const token = await getToken();
+  if (!token) return null;
 
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress;
@@ -26,27 +34,19 @@ export async function getOrCreateWorkspace(): Promise<WorkspaceContext | null> {
 
   const res = await fetch(`${API_URL}/v1/me`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clerk_user_id: userId, email }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ email }),
     cache: "no-store",
   });
   if (!res.ok) {
     console.error("getOrCreateWorkspace: /v1/me failed", res.status, await res.text());
     return null;
   }
-  const data = (await res.json()) as Omit<WorkspaceContext, "clerk_user_id" | "email">;
-  return { ...data, clerk_user_id: userId, email };
+  const data = (await res.json()) as Omit<WorkspaceContext, "clerk_user_id" | "email" | "token">;
+  return { ...data, clerk_user_id: userId, email, token };
 }
 
-/**
- * Headers to send on every API call from server components / actions so the
- * (header-trusting) API knows which workspace this request is for.
- *
- * TODO: replace with a Clerk JWT once we add JWKS verification on the API.
- */
-export function workspaceHeaders(ctx: WorkspaceContext): Record<string, string> {
-  return {
-    "X-Workspace-Id": ctx.workspace_id,
-    "X-User-Id": ctx.user_id,
-  };
+/** Auth headers for an API call from server components / actions. */
+export function authHeaders(ctx: WorkspaceContext): Record<string, string> {
+  return { Authorization: `Bearer ${ctx.token}` };
 }
