@@ -41,7 +41,7 @@ export async function emailTick(): Promise<void> {
   const r = await query<EmailWorkflow>(
     `select id, workspace_id, version, trigger_config, last_polled_at
        from workflows
-      where trigger_kind = 'email' and archived = false`,
+      where trigger_kind = 'email' and archived = false and is_paused = false`,
     [],
   );
 

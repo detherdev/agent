@@ -76,7 +76,8 @@ inboundRouter.post("/", async (c) => {
 
   const workflows = await query<{ id: string; version: number }>(
     `select id, version from workflows
-       where workspace_id = $1 and trigger_kind = 'inbound_email' and archived = false`,
+       where workspace_id = $1 and trigger_kind = 'inbound_email'
+         and archived = false and is_paused = false`,
     [workspace.id],
   );
   if (workflows.rows.length === 0) {

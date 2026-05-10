@@ -15,6 +15,8 @@ export interface WorkflowInstallSpec {
   model: string;
   plannerModel: string | null;
   testCases: Array<{ name: string; input: unknown; rubric: string }>;
+  /** If true, automated triggers (schedule/email/drive) skip this workflow until activated. */
+  isPaused?: boolean;
 }
 
 export interface InstallResult {
@@ -30,8 +32,9 @@ export async function installWorkflow(spec: WorkflowInstallSpec): Promise<Instal
   return await withTx(async (client) => {
     const r = await client.query<{ id: string }>(
       `insert into workflows (workspace_id, name, goal, input_schema, trigger_kind,
-                              trigger_config, tool_config, guardrails, model, planner_model)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                              trigger_config, tool_config, guardrails, model, planner_model,
+                              is_paused)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        returning id`,
       [
         spec.workspaceId,
@@ -44,6 +47,7 @@ export async function installWorkflow(spec: WorkflowInstallSpec): Promise<Instal
         JSON.stringify(spec.guardrails),
         spec.model,
         spec.plannerModel,
+        spec.isPaused ?? false,
       ],
     );
     const workflowId = r.rows[0]!.id;

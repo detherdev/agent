@@ -34,7 +34,7 @@ export async function driveTick(): Promise<void> {
   const r = await query<DriveWorkflow>(
     `select id, workspace_id, version, trigger_config, last_polled_at
        from workflows
-      where trigger_kind = 'drive_watch' and archived = false`,
+      where trigger_kind = 'drive_watch' and archived = false and is_paused = false`,
     [],
   );
 

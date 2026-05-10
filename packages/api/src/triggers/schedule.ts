@@ -33,7 +33,7 @@ export async function scheduleTick(): Promise<void> {
     const r = await client.query<ScheduleWorkflow>(
       `select id, workspace_id, version, trigger_config, last_fired_at, created_at
          from workflows
-        where trigger_kind = 'schedule' and archived = false
+        where trigger_kind = 'schedule' and archived = false and is_paused = false
         for update skip locked`,
     );
 

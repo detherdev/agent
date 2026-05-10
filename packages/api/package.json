@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "runtime": "workspace:*",
+    "evals": "workspace:*",
     "hono": "^4.6.10",
     "@hono/node-server": "^1.13.5",
     "@hono/zod-validator": "^0.4.1",

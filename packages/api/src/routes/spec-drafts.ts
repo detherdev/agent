@@ -98,6 +98,8 @@ specDraftsRouter.post("/:id/install", async (c) => {
     model: String(spec.model ?? "claude-sonnet-4-6"),
     plannerModel: typeof spec.planner_model === "string" ? spec.planner_model : null,
     testCases,
+    // TODO: once the practice-run test page exists, install paused by
+    // default and require explicit Activate after green evals.
   });
 
   await query(

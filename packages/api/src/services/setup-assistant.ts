@@ -7,6 +7,7 @@ import type {
   ContentBlockParam,
   ToolResultBlockParam,
 } from "@anthropic-ai/sdk/resources/messages";
+import cronParser from "cron-parser";
 import {
   query,
   listConnectorSlugs,
@@ -307,7 +308,28 @@ async function proposeSpec(input: unknown, draftId: string): Promise<ToolOutcome
   try {
     ToolConfig.parse(raw.tool_config ?? {});
     Guardrails.parse(raw.guardrails ?? {});
-    TriggerKind.parse(raw.trigger_kind);
+    const kind = TriggerKind.parse(raw.trigger_kind);
+
+    // Cron validation — catch bad expressions at propose time, not at the
+    // first scheduled fire (where they'd just silently never fire).
+    if (kind === "schedule") {
+      const tc = (raw.trigger_config as { cron?: string; timezone?: string }) ?? {};
+      if (!tc.cron) {
+        return {
+          content:
+            "validation failed: schedule trigger requires trigger_config.cron (e.g. '0 9 * * 1-5'). Update the spec and call propose_spec again.",
+          proposedSpecUpdated: false,
+        };
+      }
+      try {
+        cronParser.parseExpression(tc.cron, { tz: tc.timezone ?? "UTC" });
+      } catch (err) {
+        return {
+          content: `validation failed: cron '${tc.cron}' is invalid (${(err as Error).message}). Use standard 5-field cron syntax.`,
+          proposedSpecUpdated: false,
+        };
+      }
+    }
   } catch (err) {
     return {
       content: `validation failed: ${(err as Error).message}. Fix the spec and call propose_spec again.`,

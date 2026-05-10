@@ -62,6 +62,7 @@ create table if not exists workflows (
   planner_model   text,                            -- optional escalation model
   version         int not null default 1,
   archived        boolean not null default false,
+  is_paused       boolean not null default false,
   last_fired_at   timestamptz,
   last_polled_at  timestamptz,
   trigger_state   jsonb not null default '{}',
@@ -71,6 +72,7 @@ create table if not exists workflows (
 
 create index if not exists workflows_workspace_idx on workflows(workspace_id) where archived = false;
 create index if not exists workflows_trigger_kind_idx on workflows(trigger_kind) where archived = false;
+create index if not exists workflows_active_idx on workflows(workspace_id) where archived = false and is_paused = false;
 
 -- ===== Runs =====
 
