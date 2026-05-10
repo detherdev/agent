@@ -1,0 +1,88 @@
+{
+  "name": "Triage support tickets",
+  "tagline": "Customer emails come into your assistant inbox. I classify, set urgency, draft a reply, ping Slack — you approve before anything sends.",
+  "description": "Inbound customer email lands in your workspace inbox; I read it (including any attached screenshots), classify it (billing/bug/how-to/feature/complaint), set urgency, draft a response in your tone, and drop a one-line summary plus draft in Slack. You approve before any reply goes out.",
+  "time_saved": "5–15 minutes per ticket",
+  "what_youll_connect": ["Slack", "Gmail"],
+  "trigger_kind": "inbound_email",
+  "trigger_config": {},
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "from": { "type": "string" },
+      "subject": { "type": "string" },
+      "body": { "type": "string" },
+      "attachment_count": { "type": "integer" }
+    }
+  },
+  "tool_config": {
+    "connectors": [{ "slug": "slack" }, { "slug": "gmail" }],
+    "builtins": ["document_understand"],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 25,
+    "budget_usd": 0.3,
+    "redact_pii": true,
+    "shadow_mode": false,
+    "approvals": [
+      { "tool": "gmail_send", "reason": "Customer replies always need a human OK." }
+    ]
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": null,
+  "system_prompt_path": "system-prompts/ticket-triage.md",
+  "test_cases": [
+    {
+      "name": "how-to question with clear answer",
+      "input": {
+        "from": "user@customer.com",
+        "subject": "How do I export reports?",
+        "body": "I can't figure out where to export the monthly report. Help?",
+        "attachment_count": 0
+      },
+      "rubric": "Classified as how_to + low. Drafts a 3–5 sentence reply pointing to the export feature. Slack one-liner + draft below."
+    },
+    {
+      "name": "billing — refund request",
+      "input": {
+        "from": "angry@customer.com",
+        "subject": "Refund please",
+        "body": "I was charged twice this month. Refund me.",
+        "attachment_count": 0
+      },
+      "rubric": "Classified as billing + medium. Draft acknowledges the double charge and promises to investigate WITHOUT committing to a refund — that's owner's call. Slack summary present."
+    },
+    {
+      "name": "production-down complaint",
+      "input": {
+        "from": "ceo@bigcustomer.com",
+        "subject": "URGENT: site is down",
+        "body": "Our site has been down for 30 minutes. This is unacceptable.",
+        "attachment_count": 0
+      },
+      "rubric": "Classified as complaint + high. Slack summary uses an attention prefix. Draft reply acknowledges the frustration and outage, says someone is looking now, asks for any error message or screenshot."
+    },
+    {
+      "name": "screenshot bug report",
+      "input": {
+        "from": "user@customer.com",
+        "subject": "Something broke",
+        "body": "See attached.",
+        "attachment_count": 1
+      },
+      "rubric": "Agent calls document_understand on the screenshot, classifies bug, drafts a reply asking for browser + OS + steps to reproduce."
+    },
+    {
+      "name": "feature request",
+      "input": {
+        "from": "user@customer.com",
+        "subject": "Could you build SSO?",
+        "body": "We'd love to use you company-wide but we need SAML SSO. Any plans?",
+        "attachment_count": 0
+      },
+      "rubric": "Classified as feature_request. Draft thanks them, asks 1–2 questions about their underlying need (compliance? Size? Identity provider?), makes no promises about ship date."
+    }
+  ]
+}

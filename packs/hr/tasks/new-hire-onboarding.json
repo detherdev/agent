@@ -1,0 +1,32 @@
+{
+  "name": "Onboard a new hire (first week)",
+  "tagline": "Welcome email → Slack intro → wait one day → manager checks in on day 1.",
+  "description": "Three-phase task for the first week of a new hire's experience. Phase 1 fires the welcome workflow (drafts an email + Slack intro). Phase 2 waits a day for human review. Phase 3 reminds the manager to do a 1:1 check-in on day 1.",
+  "input_schema": {
+    "type": "object",
+    "required": ["name", "personal_email", "role", "start_date", "manager_name"],
+    "properties": {
+      "name": { "type": "string" },
+      "personal_email": { "type": "string" },
+      "role": { "type": "string" },
+      "start_date": { "type": "string" },
+      "manager_name": { "type": "string" },
+      "notes": { "type": "string" }
+    }
+  },
+  "phases": [
+    {
+      "name": "Draft welcome email + Slack intro",
+      "workflow_name": "Welcome a new hire",
+      "input": {},
+      "max_retries": 2
+    },
+    {
+      "name": "Day 1 check-in reminder",
+      "human_gate": true,
+      "depends_on": [0],
+      "human_instructions": "Today is the new hire's first day. Do a 1:1 check-in. Approve when done — that closes out this task.",
+      "not_before_hours": 24
+    }
+  ]
+}

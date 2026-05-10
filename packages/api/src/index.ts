@@ -14,6 +14,7 @@ import { statsRouter } from "./routes/stats.js";
 import { inboundRouter } from "./routes/inbound.js";
 import { specDraftsRouter } from "./routes/spec-drafts.js";
 import { tasksRouter } from "./routes/tasks.js";
+import { discoveryRouter } from "./routes/discovery.js";
 import { verifyClerkJwt, requireWorkspace } from "./middleware/auth.js";
 
 const app = new Hono();
@@ -63,6 +64,7 @@ auth.route("/catalog", catalogRouter);
 auth.route("/stats", statsRouter);
 auth.route("/spec-drafts", specDraftsRouter);
 auth.route("/tasks", tasksRouter);
+auth.route("/discover", discoveryRouter);
 
 app.route("/v1", auth);
 

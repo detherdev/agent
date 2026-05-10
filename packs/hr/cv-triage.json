@@ -1,0 +1,76 @@
+{
+  "name": "Triage incoming resumes",
+  "tagline": "Candidates email their resume to your assistant inbox. I extract the key details, score against your open roles, and post to Slack.",
+  "description": "Set up a forwarding rule on your hiring inbox (or share the workspace inbox directly with applicants). For each new application, I read the resume via vision, pull out role / experience / skills, score against the roles you've told me about, and drop a one-line summary in Slack with the resume linked.",
+  "time_saved": "15–30 minutes per resume on a busy week",
+  "what_youll_connect": ["Slack", "(uses your workspace inbox — no email connector needed)"],
+  "trigger_kind": "inbound_email",
+  "trigger_config": {},
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "from": { "type": "string" },
+      "subject": { "type": "string" },
+      "body": { "type": "string" },
+      "attachment_count": { "type": "integer" }
+    }
+  },
+  "tool_config": {
+    "connectors": [{ "slug": "slack" }],
+    "builtins": ["document_understand"],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 40,
+    "budget_usd": 0.5,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": []
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": null,
+  "system_prompt_path": "system-prompts/cv-triage.md",
+  "test_cases": [
+    {
+      "name": "single PDF resume, strong match",
+      "input": {
+        "from": "candidate@example.com",
+        "subject": "Application for Senior Engineer",
+        "body": "Hi! I'd love to apply for the Senior Engineer role. Resume attached.",
+        "attachment_count": 1
+      },
+      "rubric": "Agent calls document_understand on attachment 0, extracts name + skills + experience, scores 'strong' against the senior-engineer role (assumes role exists in workspace state), posts to Slack with evidence."
+    },
+    {
+      "name": "multiple attachments — resume + logo",
+      "input": {
+        "from": "candidate@example.com",
+        "subject": "Application",
+        "body": "Resume + portfolio attached.",
+        "attachment_count": 2
+      },
+      "rubric": "Agent calls document_understand on each. Junk attachment returns wrong_document_type and is skipped; real resume processed; summary notes 1 junk attachment."
+    },
+    {
+      "name": "no roles defined yet",
+      "input": {
+        "from": "candidate@example.com",
+        "subject": "Application",
+        "body": "Resume attached.",
+        "attachment_count": 1
+      },
+      "rubric": "If workspace has no open roles, agent extracts candidate data, labels as 'interesting, no current opening', posts to Slack with the resume info for the hiring manager to consider."
+    },
+    {
+      "name": "vendor newsletter (not an application)",
+      "input": {
+        "from": "newsletter@vendor.com",
+        "subject": "Q1 product update",
+        "body": "Read about our latest features...",
+        "attachment_count": 0
+      },
+      "rubric": "Agent recognizes this is not an application and outputs 'NOT_AN_APPLICATION'. Does not call any tools beyond document_understand (if anything)."
+    }
+  ]
+}

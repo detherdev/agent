@@ -1,0 +1,30 @@
+{
+  "name": "Prep for a QBR",
+  "tagline": "Pull meeting context → human reviews → posts the brief to Slack",
+  "description": "Two-phase task to prep for a Quarterly Business Review. Phase 1 runs the meeting-prep workflow (pulls Gmail history with the attendees, drafts a brief, posts to Slack). Phase 2 is a human-gate so the AE can read and approve the brief before sharing it externally.",
+  "input_schema": {
+    "type": "object",
+    "required": ["customer_name", "attendees"],
+    "properties": {
+      "customer_name": { "type": "string" },
+      "attendees": {
+        "type": "array",
+        "items": { "type": "object", "properties": { "name": { "type": "string" }, "email": { "type": "string" } } }
+      }
+    }
+  },
+  "phases": [
+    {
+      "name": "Pull meeting context + draft brief",
+      "workflow_name": "Prep me for a meeting",
+      "input": {},
+      "max_retries": 2
+    },
+    {
+      "name": "AE reviews the brief",
+      "human_gate": true,
+      "depends_on": [0],
+      "human_instructions": "Read the brief in Slack. If anything is wrong or missing, reject with notes and I'll re-pull. Otherwise approve to close out."
+    }
+  ]
+}

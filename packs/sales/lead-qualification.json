@@ -1,0 +1,80 @@
+{
+  "name": "Qualify inbound leads",
+  "tagline": "When someone fills out your contact form, I qualify them, draft a tailored reply, and ping your team in Slack.",
+  "description": "I read the contact form submission, classify the lead as hot / warm / cold against your ICP, draft an appropriate email reply, and post a one-line summary to your team's inbound Slack channel with the draft below it. You approve before any email goes out.",
+  "time_saved": "5–10 minutes per inbound lead",
+  "what_youll_connect": ["Slack", "Gmail"],
+  "trigger_kind": "webhook",
+  "trigger_config": {},
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string" },
+      "email": { "type": "string" },
+      "company": { "type": "string" },
+      "message": { "type": "string" }
+    }
+  },
+  "tool_config": {
+    "connectors": [{ "slug": "slack" }, { "slug": "gmail" }],
+    "builtins": [],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 25,
+    "budget_usd": 0.3,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": [
+      {
+        "tool": "gmail_send",
+        "reason": "Inbound replies always need a quick human OK before sending."
+      }
+    ]
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": null,
+  "system_prompt_path": "system-prompts/lead-qualification.md",
+  "test_cases": [
+    {
+      "name": "hot inbound — ICP fit, specific ask",
+      "input": {
+        "name": "Sara Chen",
+        "email": "sara@growco.io",
+        "company": "Growco",
+        "message": "We're a 30-person SaaS and looking to evaluate tools for AR chasing next quarter. Do you have a demo?"
+      },
+      "rubric": "Agent classifies Hot, drafts a warm reply suggesting a 15-min call, posts to Slack with the draft, does not include pricing, and pauses for approval before gmail_send."
+    },
+    {
+      "name": "cold inbound — student looking for advice",
+      "input": {
+        "name": "Marcus Lee",
+        "email": "mlee@university.edu",
+        "company": "",
+        "message": "Hi! I'm a student studying SaaS startups. Could you tell me about your business model for my paper?"
+      },
+      "rubric": "Agent classifies Cold, drafts a brief, polite reply offering blog/newsletter rather than a meeting, posts a short Slack summary."
+    },
+    {
+      "name": "competitor-mention forces Hot",
+      "input": {
+        "name": "Dana Ortiz",
+        "email": "dana@firm.co",
+        "company": "Firm Co",
+        "message": "We're trialing Gumloop right now and not loving it. Curious how you compare."
+      },
+      "rubric": "Agent classifies Hot due to competitor mention, drafts a thoughtful reply asking about their specific friction points, posts to Slack."
+    },
+    {
+      "name": "missing company info",
+      "input": {
+        "name": "Anon",
+        "email": "anon@example.com",
+        "message": "Tell me about your service."
+      },
+      "rubric": "Agent notes the missing context, classifies as Warm, drafts a short reply asking 1–2 clarifying questions. Does NOT fabricate a company name or size."
+    }
+  ]
+}

@@ -181,6 +181,64 @@ export async function installCatalogJob(
   }
 }
 
+// ===== Discovery Assistant =====
+
+export interface DiscoveryPick {
+  kind: "workflow" | "task";
+  slug: string;
+  why: string;
+}
+
+export interface DiscoveryRecommendations {
+  kind: "discovery";
+  picks?: DiscoveryPick[];
+  summary?: string;
+}
+
+export interface DiscoveryDraft {
+  id: string;
+  messages: unknown[];
+  recommendations: DiscoveryRecommendations | null;
+  status: string;
+  greeting?: string;
+}
+
+export async function startDiscoveryDraft(ctx: WorkspaceContext): Promise<DiscoveryDraft> {
+  const res = await fetch(`${API_URL}/v1/discover`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+  });
+  if (!res.ok) throw new Error(`startDiscovery failed: ${res.status}`);
+  return (await res.json()) as DiscoveryDraft;
+}
+
+export async function getDiscoveryDraft(ctx: WorkspaceContext, id: string): Promise<DiscoveryDraft> {
+  const res = await fetch(`${API_URL}/v1/discover/${id}`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) throw new Error(`getDiscoveryDraft failed: ${res.status}`);
+  return (await res.json()) as DiscoveryDraft;
+}
+
+export async function sendDiscoveryChatMessage(
+  ctx: WorkspaceContext,
+  id: string,
+  text: string,
+): Promise<{ assistant_message: string; recommendations_ready: boolean; draft: DiscoveryDraft }> {
+  const res = await fetch(`${API_URL}/v1/discover/${id}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`sendDiscoveryChatMessage failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as {
+    assistant_message: string;
+    recommendations_ready: boolean;
+    draft: DiscoveryDraft;
+  };
+}
+
 export interface RequiredProvider {
   provider: string;
   connected: boolean;

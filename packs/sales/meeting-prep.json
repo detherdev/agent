@@ -1,0 +1,66 @@
+{
+  "name": "Prep me for a meeting",
+  "tagline": "Run this before any external meeting. I'll search Gmail for prior threads and drop a 200-word brief in Slack.",
+  "description": "I look up everyone in the meeting in your Gmail history, summarize what was discussed before, what's still open, and suggest talking points. Designed for AEs who want to walk in cold-but-warm.",
+  "time_saved": "10–20 minutes per meeting",
+  "what_youll_connect": ["Gmail", "Slack"],
+  "trigger_kind": "manual",
+  "trigger_config": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["meeting_title", "attendees"],
+    "properties": {
+      "meeting_title": { "type": "string" },
+      "meeting_time": { "type": "string", "description": "ISO timestamp" },
+      "attendees": {
+        "type": "array",
+        "items": { "type": "object", "properties": { "name": { "type": "string" }, "email": { "type": "string" } } }
+      }
+    }
+  },
+  "tool_config": {
+    "connectors": [{ "slug": "gmail" }, { "slug": "slack" }],
+    "builtins": [],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 30,
+    "budget_usd": 0.4,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": []
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": null,
+  "system_prompt_path": "system-prompts/meeting-prep.md",
+  "test_cases": [
+    {
+      "name": "known customer with history",
+      "input": {
+        "meeting_title": "Q1 review with Acme",
+        "attendees": [{ "name": "Sara Chen", "email": "sara@acme.com" }]
+      },
+      "rubric": "Agent searches Gmail for sara@acme.com, summarizes 3+ prior threads with dates, identifies open questions, posts to Slack."
+    },
+    {
+      "name": "new contact, no history",
+      "input": {
+        "meeting_title": "Intro with new prospect",
+        "attendees": [{ "name": "Unknown", "email": "newperson@newco.com" }]
+      },
+      "rubric": "Agent finds no Gmail history, says so explicitly in the brief, suggests opening questions. Does NOT fabricate context."
+    },
+    {
+      "name": "multiple attendees, one with churn signal",
+      "input": {
+        "meeting_title": "Renewal call",
+        "attendees": [
+          { "name": "Sara Chen", "email": "sara@acme.com" },
+          { "name": "Dave Park", "email": "dave@acme.com" }
+        ]
+      },
+      "rubric": "Agent searches for both, flags any tone shift or pricing complaint in past threads in the 'Anything weird' section."
+    }
+  ]
+}

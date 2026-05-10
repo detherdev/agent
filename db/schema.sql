@@ -241,6 +241,9 @@ create table if not exists task_phases (
   human_instructions  text,
   depends_on          jsonb not null default '[]'::jsonb,
   not_before          timestamptz,
+  max_retries         int not null default 0,
+  retry_count         int not null default 0,
+  retry_after         timestamptz,
   status              text not null default 'pending' check (status in (
                         'pending','ready','running','awaiting_human','succeeded','failed','skipped','cancelled'
                       )),

@@ -17,6 +17,8 @@ export const PhaseTemplate = z
     input: z.record(z.unknown()).default({}),
     /** Hours after task start before this phase is eligible. Useful for cool-off / next-day phases. */
     not_before_hours: z.number().nonnegative().optional(),
+    /** Retry on failure (workflow phases only — human rejection never retries). 0 = no retry. */
+    max_retries: z.number().int().min(0).max(5).default(0),
   })
   .refine(
     (p) => p.human_gate || !!p.workflow_name,
@@ -122,8 +124,8 @@ export async function startTaskFromTemplate(args: StartTaskArgs): Promise<StartT
 
       await client.query(
         `insert into task_phases (task_id, order_idx, name, workflow_id, human_gate, human_instructions,
-                                  depends_on, not_before, input)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                                  depends_on, not_before, input, max_retries)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           taskId,
           i,
@@ -134,6 +136,7 @@ export async function startTaskFromTemplate(args: StartTaskArgs): Promise<StartT
           JSON.stringify(p.depends_on),
           notBefore,
           JSON.stringify(p.input),
+          p.max_retries ?? 0,
         ],
       );
     }
@@ -166,6 +169,9 @@ export interface TaskPhaseRow {
   human_instructions: string | null;
   depends_on: number[];
   not_before: Date | null;
+  max_retries: number;
+  retry_count: number;
+  retry_after: Date | null;
   status: string;
   run_id: string | null;
   input: Record<string, unknown> | null;
@@ -186,7 +192,8 @@ export async function loadActiveTasks(): Promise<TaskRow[]> {
 export async function loadTaskPhases(taskId: string): Promise<TaskPhaseRow[]> {
   const r = await query<TaskPhaseRow>(
     `select id, task_id, order_idx, name, workflow_id, human_gate, human_instructions,
-            depends_on, not_before, status, run_id, input, output, error
+            depends_on, not_before, max_retries, retry_count, retry_after,
+            status, run_id, input, output, error
        from task_phases
       where task_id = $1
       order by order_idx asc`,
@@ -233,6 +240,38 @@ export async function markPhaseFailed(phaseId: string, error: string): Promise<v
     `update task_phases set status = 'failed', error = $1, finished_at = now() where id = $2`,
     [error, phaseId],
   );
+}
+
+/**
+ * On workflow-phase failure, decide retry vs. give up.
+ *
+ * Backoff (minutes): retry_count 0 -> 1, 1 -> 5, 2 -> 15, 3 -> 60, 4 -> 240.
+ * Returns true if the phase was reset for retry, false if it was finalized
+ * as failed (retry budget exhausted).
+ */
+export async function failOrRetryPhase(phase: TaskPhaseRow, error: string): Promise<boolean> {
+  if (phase.retry_count >= phase.max_retries) {
+    await markPhaseFailed(phase.id, error);
+    return false;
+  }
+  const next = phase.retry_count + 1;
+  const backoffMin = [1, 5, 15, 60, 240][Math.min(next - 1, 4)] ?? 240;
+  const retryAfter = new Date(Date.now() + backoffMin * 60_000);
+
+  await query(
+    `update task_phases
+        set status = 'pending',
+            retry_count = $1,
+            retry_after = $2,
+            run_id = null,
+            output = null,
+            error = $3,
+            started_at = null,
+            finished_at = null
+      where id = $4`,
+    [next, retryAfter, `attempt ${next}: ${error}`, phase.id],
+  );
+  return true;
 }
 
 export async function updateTaskStatus(

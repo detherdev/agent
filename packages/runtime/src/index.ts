@@ -44,6 +44,7 @@ export {
   markPhaseAwaitingHuman,
   markPhaseSucceeded,
   markPhaseFailed,
+  failOrRetryPhase,
   updateTaskStatus,
   type TaskTemplate,
   type PhaseTemplate,

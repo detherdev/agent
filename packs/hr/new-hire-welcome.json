@@ -1,0 +1,64 @@
+{
+  "name": "Welcome a new hire",
+  "tagline": "After an offer's signed, I draft the welcome email and post the team intro in Slack.",
+  "description": "Run this once an offer is accepted. I'll draft a friendly welcome email to the new hire (you approve before it sends) and post a team intro in your welcome Slack channel.",
+  "time_saved": "20 minutes per hire",
+  "what_youll_connect": ["Gmail", "Slack"],
+  "trigger_kind": "manual",
+  "trigger_config": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["name", "personal_email", "role", "start_date", "manager_name"],
+    "properties": {
+      "name": { "type": "string" },
+      "personal_email": { "type": "string" },
+      "role": { "type": "string" },
+      "start_date": { "type": "string", "description": "ISO date" },
+      "manager_name": { "type": "string" },
+      "notes": { "type": "string", "description": "Anything fun they shared in interviews" }
+    }
+  },
+  "tool_config": {
+    "connectors": [{ "slug": "gmail" }, { "slug": "slack" }],
+    "builtins": [],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 15,
+    "budget_usd": 0.2,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": [
+      { "tool": "gmail_send", "reason": "Always review the welcome email before it goes." }
+    ]
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": null,
+  "system_prompt_path": "system-prompts/new-hire-welcome.md",
+  "test_cases": [
+    {
+      "name": "full info — happy path",
+      "input": {
+        "name": "Alex Chen",
+        "personal_email": "alex@example.com",
+        "role": "Senior Engineer",
+        "start_date": "2026-06-01",
+        "manager_name": "Sara",
+        "notes": "Loves rock climbing, lived in Tokyo for 3 years."
+      },
+      "rubric": "Agent drafts a warm welcome email naming the start date + manager + day-1 expectations. Pauses for approval before gmail_send. Posts a Slack intro that mentions the climbing/Tokyo note. Does not include compensation."
+    },
+    {
+      "name": "no fun notes",
+      "input": {
+        "name": "Pat Singh",
+        "personal_email": "pat@example.com",
+        "role": "Account Manager",
+        "start_date": "2026-06-15",
+        "manager_name": "Dana"
+      },
+      "rubric": "Agent does NOT fabricate a hobby/background. Email + Slack post stick to factual info."
+    }
+  ]
+}

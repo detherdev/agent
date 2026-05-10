@@ -7,6 +7,7 @@ import {
   markPhaseAwaitingHuman,
   markPhaseSucceeded,
   markPhaseFailed,
+  failOrRetryPhase,
   updateTaskStatus,
   type TaskPhaseRow,
   type TaskRow,
@@ -44,7 +45,8 @@ export async function orchestratorTick(): Promise<void> {
 async function advanceTask(task: TaskRow): Promise<void> {
   const phases = await loadTaskPhases(task.id);
 
-  // Reap completed runs for any 'running' phase.
+  // Reap completed runs for any 'running' phase. Workflow-phase failures
+  // route through failOrRetryPhase so retry budgets are honored.
   for (const p of phases) {
     if (p.status !== "running" || !p.run_id) continue;
     const r = await query<{ status: string; result: unknown; error: string | null }>(
@@ -53,13 +55,17 @@ async function advanceTask(task: TaskRow): Promise<void> {
     );
     const run = r.rows[0];
     if (!run) {
-      await markPhaseFailed(p.id, "run not found");
+      await failOrRetryPhase(p, "run not found");
       continue;
     }
     if (run.status === "succeeded") {
       await markPhaseSucceeded(p.id, run.result);
     } else if (run.status === "failed" || run.status === "budget_exceeded" || run.status === "cancelled") {
-      await markPhaseFailed(p.id, run.error ?? `run ended ${run.status}`);
+      const reason = run.error ?? `run ended ${run.status}`;
+      const retried = await failOrRetryPhase(p, reason);
+      if (retried) {
+        log.info({ phase: p.id, attempt: p.retry_count + 1, reason }, "task phase retry scheduled");
+      }
     }
     // else: still queued/running/awaiting_approval — leave alone, next tick will check
   }
@@ -99,12 +105,14 @@ async function advanceTask(task: TaskRow): Promise<void> {
     return;
   }
 
+  const now = new Date();
   for (const p of after) {
     if (p.status !== "pending") continue;
     const deps = p.depends_on;
     const depsOk = deps.every((d) => completedIdx.has(d));
     if (!depsOk) continue;
-    if (p.not_before && p.not_before > new Date()) continue;
+    if (p.not_before && p.not_before > now) continue;
+    if (p.retry_after && p.retry_after > now) continue;
 
     if (p.human_gate) {
       await beginHumanGate(p, task);

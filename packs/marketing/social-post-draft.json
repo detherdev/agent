@@ -1,0 +1,57 @@
+{
+  "name": "Draft social posts from a seed",
+  "tagline": "Give me a customer win or product update; I'll draft 3 versions (long LinkedIn / short LinkedIn / Twitter) and drop them in Slack.",
+  "description": "Drafts only — never auto-publishes. You review and post. The drafts stick to your facts; I don't make up customer names, metrics, or quotes.",
+  "time_saved": "30 minutes per post-set",
+  "what_youll_connect": ["Slack"],
+  "trigger_kind": "manual",
+  "trigger_config": {},
+  "input_schema": {
+    "type": "object",
+    "required": ["seed"],
+    "properties": {
+      "seed": { "type": "string", "description": "The angle / news / story you want to post about" },
+      "tone": { "type": "string", "enum": ["operator", "expert", "playful"], "default": "operator" }
+    }
+  },
+  "tool_config": {
+    "connectors": [{ "slug": "slack" }],
+    "builtins": [],
+    "mcp_servers": [],
+    "custom_tools": []
+  },
+  "guardrails": {
+    "step_cap": 10,
+    "budget_usd": 0.15,
+    "redact_pii": false,
+    "shadow_mode": false,
+    "approvals": []
+  },
+  "model": "claude-sonnet-4-6",
+  "planner_model": null,
+  "system_prompt_path": "system-prompts/social-post-draft.md",
+  "test_cases": [
+    {
+      "name": "customer win seed",
+      "input": {
+        "seed": "A bookkeeping firm using our platform processed 200 invoices this month with zero errors and saved 18 hours."
+      },
+      "rubric": "Three variants posted to Slack: long LinkedIn (100–180 words), short LinkedIn (40–80), Twitter (≤240). Uses the metric in the seed faithfully, no invented customer name."
+    },
+    {
+      "name": "thin seed",
+      "input": {
+        "seed": "We hit 100 customers"
+      },
+      "rubric": "Three variants. Does NOT invent revenue, churn, ARR, or any specific number not in the seed."
+    },
+    {
+      "name": "playful tone request",
+      "input": {
+        "seed": "Our team just shipped batch processing.",
+        "tone": "playful"
+      },
+      "rubric": "Three variants in a slightly more casual register but still no emojis (unless seed implies them) and no inflated claims."
+    }
+  ]
+}

@@ -17,11 +17,14 @@ export default async function JobsPage() {
     <div className="min-h-screen">
       <AppHeader pendingCount={pending.length} />
       <main className="mx-auto max-w-4xl px-6 py-10">
-      <div className="mb-10">
+      <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">What should I handle?</h1>
         <p className="mt-2 text-neutral-400">
-          Pick a job. I'll walk you through connecting your accounts, then start handling it on your
-          schedule. You stay in control of anything that matters.
+          Pick a job below. Not sure where to start? Have me{" "}
+          <Link href="/jobs/discover" className="text-emerald-400 underline">
+            walk you through it
+          </Link>
+          .
         </p>
       </div>
 
