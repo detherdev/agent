@@ -206,7 +206,38 @@ fly secrets set -a REPLACE_WITH_FLY_APP_NAME \
   SLACK_CLIENT_ID="..." \
   SLACK_CLIENT_SECRET="..." \
   SLACK_SIGNING_SECRET="..." \
-  SLACK_REDIRECT_URI="https://api.yourdomain.com/v1/slack/install/callback"
+  SLACK_REDIRECT_URI="https://api.yourdomain.com/v1/slack/install/callback" \
+  TEAMS_APP_ID="..." \
+  TEAMS_APP_SECRET="..."
+```
+
+### 2.10c Microsoft Teams interactive bot (optional)
+
+The Teams bot lets workspaces approve runs via Adaptive Cards inside Teams.
+
+```
+1. Azure Portal → Bot Services → Create
+   - Bot type: Multi-tenant
+   - Microsoft App ID: auto-create
+   - Pricing tier: F0 (free)
+2. Once created → Configuration:
+   - Messaging endpoint: https://api.yourdomain.com/v1/teams/messages
+3. Channels → Add Microsoft Teams channel
+4. App registration → Certificates & secrets → New client secret
+   - Copy:
+     - Application (client) ID → TEAMS_APP_ID + NEXT_PUBLIC_TEAMS_APP_ID
+     - Client secret value     → TEAMS_APP_SECRET
+5. Open infra/teams/manifest.json:
+   - Replace REPLACE_WITH_TEAMS_APP_ID (twice — `id` and `bots[0].botId`)
+   - Replace REPLACE_WITH_YOUR_DOMAIN with your domain
+   - Add color.png (192×192) + outline.png (32×32) icons in the same dir
+6. Zip manifest.json + icons → upload at https://admin.teams.microsoft.com/
+   to publish org-wide, OR upload to each customer's Teams Apps as
+   a "custom app" during onboarding.
+7. Customer install: workspace owner enters their Microsoft Entra
+   tenant ID at /connect, clicks "Install" — opens Teams app deep link.
+   Admin adds the bot to a channel; the bot's first activity completes
+   the install.
 ```
 
 ### 2.10b Slack interactive bot (optional, recommended)

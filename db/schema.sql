@@ -173,6 +173,8 @@ create table if not exists approvals (
   created_at    timestamptz not null default now(),
   slack_channel_id  text,
   slack_message_ts  text,
+  teams_conversation_id text,
+  teams_activity_id text,
   constraint approvals_subject_check check (
     (run_id is not null and task_phase_id is null) or
     (run_id is null and task_phase_id is not null)
@@ -198,6 +200,24 @@ create table if not exists slack_installations (
   updated_at      timestamptz not null default now(),
   unique (workspace_id),
   unique (slack_team_id)
+);
+
+-- ===== Teams interactive integration =====
+
+create table if not exists teams_installations (
+  id              uuid primary key default uuid_generate_v4(),
+  workspace_id    uuid not null references workspaces(id) on delete cascade,
+  tenant_id       text not null,
+  service_url     text,
+  conversation_id text,
+  channel_id      text,
+  bot_id          text not null,
+  installed_by    text,
+  status          text not null default 'pending' check (status in ('pending', 'active', 'revoked')),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (workspace_id),
+  unique (tenant_id)
 );
 
 -- ===== Test cases (eval pack) =====

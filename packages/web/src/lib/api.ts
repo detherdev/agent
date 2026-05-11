@@ -259,6 +259,32 @@ export async function getSlackInstallStatus(ctx: WorkspaceContext): Promise<Slac
   return (await res.json()) as SlackInstallStatus;
 }
 
+export interface TeamsInstallStatus {
+  installed: boolean;
+  status: "active" | "pending" | "revoked" | "none";
+  tenant_id?: string;
+  conversation_id?: string | null;
+  channel_id?: string | null;
+}
+
+export async function getTeamsInstallStatus(ctx: WorkspaceContext): Promise<TeamsInstallStatus> {
+  const res = await fetch(`${API_URL}/v1/teams/status`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) return { installed: false, status: "none" };
+  return (await res.json()) as TeamsInstallStatus;
+}
+
+export async function initTeamsInstall(ctx: WorkspaceContext, tenantId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/v1/teams/init`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(ctx) },
+    body: JSON.stringify({ tenant_id: tenantId }),
+  });
+  if (!res.ok) throw new Error(`teams init failed: ${res.status} ${await res.text()}`);
+}
+
 export async function listRequiredProviders(ctx: WorkspaceContext): Promise<RequiredProvider[]> {
   const res = await fetch(`${API_URL}/v1/connect/required`, {
     cache: "no-store",

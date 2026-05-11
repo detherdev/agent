@@ -12,11 +12,16 @@
 
 import { query, log } from "runtime";
 import {
-  loadInstallationByWorkspace,
-  postApprovalCard,
-  updateApprovalCard,
-  describeApproval,
+  loadInstallationByWorkspace as loadSlackInstallation,
+  postApprovalCard as postSlackApprovalCard,
+  updateApprovalCard as updateSlackApprovalCard,
+  describeApproval as describeApprovalSlack,
 } from "./slack-bot.js";
+import {
+  loadInstallationByWorkspace as loadTeamsInstallation,
+  postApprovalCard as postTeamsApprovalCard,
+  updateApprovalCard as updateTeamsApprovalCard,
+} from "./teams-bot.js";
 
 interface ApprovalRow {
   id: string;
@@ -28,6 +33,8 @@ interface ApprovalRow {
   run_id: string | null;
   slack_channel_id: string | null;
   slack_message_ts: string | null;
+  teams_conversation_id: string | null;
+  teams_activity_id: string | null;
 }
 
 /**
@@ -42,12 +49,20 @@ export async function notifyApprovalPending(approvalId: string): Promise<void> {
     return;
   }
 
-  await postToSlack(approval).catch((err) =>
-    log.error(
-      { err: (err as Error).message, approvalId, workspace: approval.workspace_id },
-      "notifyApprovalPending: slack post failed",
+  await Promise.all([
+    postToSlack(approval).catch((err) =>
+      log.error(
+        { err: (err as Error).message, approvalId, workspace: approval.workspace_id },
+        "notifyApprovalPending: slack post failed",
+      ),
     ),
-  );
+    postToTeams(approval).catch((err) =>
+      log.error(
+        { err: (err as Error).message, approvalId, workspace: approval.workspace_id },
+        "notifyApprovalPending: teams post failed",
+      ),
+    ),
+  ]);
 }
 
 /**
@@ -61,32 +76,58 @@ export async function notifyApprovalDecided(
   decidedBy: string | undefined,
 ): Promise<void> {
   const approval = await loadApproval(approvalId);
-  if (!approval || !approval.slack_channel_id || !approval.slack_message_ts) return;
+  if (!approval) return;
 
-  const install = await loadInstallationByWorkspace(approval.workspace_id);
-  if (!install) return;
+  const title = describeApprovalSlack(approval.pending_tool_name, approval.pending_tool_input ?? {});
 
-  const title = describeApproval(approval.pending_tool_name, approval.pending_tool_input ?? {});
-  await updateApprovalCard({
-    install,
-    channel: approval.slack_channel_id,
-    ts: approval.slack_message_ts,
-    title,
-    decision,
-    decidedBy,
-  }).catch((err) =>
-    log.warn({ err: (err as Error).message, approvalId }, "notifyApprovalDecided: chat.update failed"),
-  );
+  const slackUpdate = approval.slack_channel_id && approval.slack_message_ts
+    ? loadSlackInstallation(approval.workspace_id).then((install) =>
+        install
+          ? updateSlackApprovalCard({
+              install,
+              channel: approval.slack_channel_id!,
+              ts: approval.slack_message_ts!,
+              title,
+              decision,
+              decidedBy,
+            })
+          : null,
+      )
+    : Promise.resolve(null);
+
+  const teamsUpdate = approval.teams_conversation_id && approval.teams_activity_id
+    ? loadTeamsInstallation(approval.workspace_id).then((install) =>
+        install
+          ? updateTeamsApprovalCard({
+              install,
+              conversationId: approval.teams_conversation_id!,
+              activityId: approval.teams_activity_id!,
+              title,
+              decision,
+              decidedBy,
+            })
+          : null,
+      )
+    : Promise.resolve(null);
+
+  await Promise.all([
+    slackUpdate.catch((err) =>
+      log.warn({ err: (err as Error).message, approvalId }, "notifyApprovalDecided: slack update failed"),
+    ),
+    teamsUpdate.catch((err) =>
+      log.warn({ err: (err as Error).message, approvalId }, "notifyApprovalDecided: teams update failed"),
+    ),
+  ]);
 }
 
 async function postToSlack(approval: ApprovalRow): Promise<void> {
-  const install = await loadInstallationByWorkspace(approval.workspace_id);
+  const install = await loadSlackInstallation(approval.workspace_id);
   if (!install) return; // workspace hasn't connected Slack yet
 
-  const title = describeApproval(approval.pending_tool_name, approval.pending_tool_input ?? {});
+  const title = describeApprovalSlack(approval.pending_tool_name, approval.pending_tool_input ?? {});
   const taskOrWorkflowName = await loadParentName(approval);
 
-  const res = await postApprovalCard({
+  const res = await postSlackApprovalCard({
     install,
     approvalId: approval.id,
     title,
@@ -104,10 +145,36 @@ async function postToSlack(approval: ApprovalRow): Promise<void> {
   );
 }
 
+async function postToTeams(approval: ApprovalRow): Promise<void> {
+  const install = await loadTeamsInstallation(approval.workspace_id);
+  if (!install || install.status !== "active") return; // workspace hasn't completed Teams install
+
+  const title = describeApprovalSlack(approval.pending_tool_name, approval.pending_tool_input ?? {});
+  const taskOrWorkflowName = await loadParentName(approval);
+
+  const res = await postTeamsApprovalCard({
+    install,
+    approvalId: approval.id,
+    title,
+    reason: approval.reason,
+    taskOrWorkflowName,
+  });
+  if (!res.ok || !res.activity_id) {
+    log.warn({ approvalId: approval.id, err: res.error }, "teams post returned not-ok");
+    return;
+  }
+
+  await query(
+    `update approvals set teams_conversation_id = $1, teams_activity_id = $2 where id = $3`,
+    [install.conversation_id, res.activity_id, approval.id],
+  );
+}
+
 async function loadApproval(approvalId: string): Promise<ApprovalRow | null> {
   const r = await query<ApprovalRow>(
     `select id, workspace_id, pending_tool_name, pending_tool_input,
-            reason, task_phase_id, run_id, slack_channel_id, slack_message_ts
+            reason, task_phase_id, run_id, slack_channel_id, slack_message_ts,
+            teams_conversation_id, teams_activity_id
        from approvals where id = $1`,
     [approvalId],
   );

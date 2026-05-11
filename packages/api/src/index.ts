@@ -22,6 +22,7 @@ import { tasksRouter } from "./routes/tasks.js";
 import { discoveryRouter } from "./routes/discovery.js";
 import { leadsRouter } from "./routes/leads.js";
 import { slackRouter } from "./routes/slack.js";
+import { teamsRouter } from "./routes/teams.js";
 import { verifyClerkJwt, requireWorkspace } from "./middleware/auth.js";
 
 const app = new Hono();
@@ -78,6 +79,7 @@ app.route("/v1/webhooks", webhooksRouter);
 app.route("/v1/webhooks/inbound-email", inboundRouter);
 app.route("/v1/leads", leadsRouter);
 app.route("/v1/slack", slackRouter);
+app.route("/v1/teams", teamsRouter);
 
 // ===== Bootstrap (JWT only — workspace may not exist yet) =====
 

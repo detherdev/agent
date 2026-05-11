@@ -9,17 +9,26 @@ import { makeHttpTool } from "./http.js";
 import { makeSqlTool } from "./sql.js";
 import { documentUnderstandTool } from "./document_understand.js";
 import { browserUseTool } from "./browser_use.js";
+import { browserActionTool } from "./browser_action.js";
 import { makeDelegateTools } from "./delegate.js";
 import { loadMcpTools } from "../mcp.js";
 import { loadConnectorTools } from "../connectors/index.js";
 
-export { makeHttpTool, makeSqlTool, documentUnderstandTool, browserUseTool, makeDelegateTools };
+export {
+  makeHttpTool,
+  makeSqlTool,
+  documentUnderstandTool,
+  browserUseTool,
+  browserActionTool,
+  makeDelegateTools,
+};
 
 // Stateless built-ins. Tools that need workflow context (delegate_*) are
 // constructed in buildToolset via the workflow argument instead.
 const BUILTINS: Partial<Record<BuiltinToolName, () => ToolDefinition>> = {
   document_understand: documentUnderstandTool,
   browser_use: browserUseTool,
+  browser_action: browserActionTool,
 };
 
 export async function buildToolset(

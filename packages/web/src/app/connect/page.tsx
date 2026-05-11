@@ -1,8 +1,14 @@
 import { redirect } from "next/navigation";
 import { getOrCreateWorkspace } from "@/lib/auth";
-import { listRequiredProviders, listPendingApprovals, getSlackInstallStatus } from "@/lib/api";
+import {
+  listRequiredProviders,
+  listPendingApprovals,
+  getSlackInstallStatus,
+  getTeamsInstallStatus,
+} from "@/lib/api";
 import { ConnectTiles } from "./ConnectTiles";
 import { SlackApprovalsTile } from "./SlackApprovalsTile";
+import { TeamsApprovalsTile } from "./TeamsApprovalsTile";
 import { AppHeader } from "@/components/AppHeader";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +22,11 @@ export default async function ConnectPage({
 }) {
   const ctx = await getOrCreateWorkspace();
   if (!ctx) redirect("/sign-in");
-  const [providers, pending, slack] = await Promise.all([
+  const [providers, pending, slack, teams] = await Promise.all([
     listRequiredProviders(ctx),
     listPendingApprovals(ctx),
     getSlackInstallStatus(ctx),
+    getTeamsInstallStatus(ctx),
   ]);
   const params = await searchParams;
 
@@ -54,6 +61,7 @@ export default async function ConnectPage({
         </p>
         <ul className="mt-4 space-y-3">
           <SlackApprovalsTile installed={slack.installed} token={ctx.token} apiUrl={API_URL} />
+          <TeamsApprovalsTile status={teams} token={ctx.token} apiUrl={API_URL} />
         </ul>
       </main>
     </div>

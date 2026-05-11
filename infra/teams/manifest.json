@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "REPLACE_WITH_TEAMS_APP_ID",
+  "packageName": "ai.workflows.bot",
+  "developer": {
+    "name": "Workflow Automation",
+    "websiteUrl": "https://REPLACE_WITH_YOUR_DOMAIN",
+    "privacyUrl": "https://REPLACE_WITH_YOUR_DOMAIN/legal/privacy",
+    "termsOfUseUrl": "https://REPLACE_WITH_YOUR_DOMAIN/legal/terms"
+  },
+  "name": {
+    "short": "Workflows",
+    "full": "Workflow Automation Approvals"
+  },
+  "description": {
+    "short": "Approve agent runs and get daily digests inside Teams.",
+    "full": "Approve agent workflow runs and human-in-the-loop tasks from Teams with one click. Approval cards land as Adaptive Cards in your channel; tap Approve or Reject and the run resumes automatically. Daily digests deliver the day's run summary."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#0b0b0c",
+  "bots": [
+    {
+      "botId": "REPLACE_WITH_TEAMS_APP_ID",
+      "scopes": ["personal", "team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["REPLACE_WITH_YOUR_DOMAIN"]
+}
