@@ -14,6 +14,7 @@ import {
   log,
 } from "runtime";
 import { incrementCost } from "./services/usage-meter.js";
+import { notifyApprovalPending } from "./services/notifications.js";
 
 const worker = new Worker<RunJob>(
   "runs",
@@ -99,6 +100,22 @@ const worker = new Worker<RunJob>(
       await incrementCost(workflow.workspace_id, result.cost_usd).catch((err) => {
         log.error({ err, runId }, "incrementCost failed");
       });
+    }
+
+    // Run paused for human approval — fan out a notification to Slack
+    // (no-op if the workspace hasn't installed the bot). Best-effort.
+    if (result?.status === "awaiting_approval") {
+      const pending = await query<{ id: string }>(
+        `select id from approvals where run_id = $1 and status = 'pending'
+          order by created_at desc limit 1`,
+        [runId],
+      );
+      const approvalId = pending.rows[0]?.id;
+      if (approvalId) {
+        await notifyApprovalPending(approvalId).catch((err) =>
+          log.error({ err: (err as Error).message, runId, approvalId }, "notify failed"),
+        );
+      }
     }
 
     return result;

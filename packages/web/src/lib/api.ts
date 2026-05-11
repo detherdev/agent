@@ -244,6 +244,21 @@ export interface RequiredProvider {
   connected: boolean;
 }
 
+export interface SlackInstallStatus {
+  installed: boolean;
+  slack_team_id?: string;
+  default_channel_id?: string | null;
+}
+
+export async function getSlackInstallStatus(ctx: WorkspaceContext): Promise<SlackInstallStatus> {
+  const res = await fetch(`${API_URL}/v1/slack/status`, {
+    cache: "no-store",
+    headers: authHeaders(ctx),
+  });
+  if (!res.ok) return { installed: false };
+  return (await res.json()) as SlackInstallStatus;
+}
+
 export async function listRequiredProviders(ctx: WorkspaceContext): Promise<RequiredProvider[]> {
   const res = await fetch(`${API_URL}/v1/connect/required`, {
     cache: "no-store",

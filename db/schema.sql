@@ -168,6 +168,8 @@ create table if not exists approvals (
   edited_input  jsonb,
   reject_reason text,
   created_at    timestamptz not null default now(),
+  slack_channel_id  text,
+  slack_message_ts  text,
   constraint approvals_subject_check check (
     (run_id is not null and task_phase_id is null) or
     (run_id is null and task_phase_id is not null)
@@ -175,6 +177,25 @@ create table if not exists approvals (
 );
 
 create index if not exists approvals_workspace_status_idx on approvals(workspace_id, status);
+
+-- ===== Slack interactive integration =====
+
+create table if not exists slack_installations (
+  id              uuid primary key default uuid_generate_v4(),
+  workspace_id    uuid not null references workspaces(id) on delete cascade,
+  slack_team_id   text not null,
+  slack_enterprise_id text,
+  bot_user_id     text not null,
+  bot_token       text not null,
+  authed_user_id  text not null,
+  authed_user_scope text,
+  scopes          text[] not null default '{}',
+  default_channel_id text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (workspace_id),
+  unique (slack_team_id)
+);
 
 -- ===== Test cases (eval pack) =====
 

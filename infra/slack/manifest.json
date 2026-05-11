@@ -1,0 +1,56 @@
+{
+  "_metadata": {
+    "major_version": 1,
+    "minor_version": 1
+  },
+  "display_information": {
+    "name": "Workflow Approvals",
+    "description": "Approve agent runs and get daily digests, without leaving Slack.",
+    "background_color": "#0b0b0c",
+    "long_description": "Approve agent runs from Slack with one click. Each approval lands as a card in your channel; tap Approve or Reject and the run resumes — no need to open the web inbox. The bot also delivers daily digests of activity and lets you trigger workflows with /automate."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Workflows",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/automate",
+        "url": "https://api.REPLACE_WITH_YOUR_DOMAIN/v1/slack/commands",
+        "description": "Run or inspect a workflow",
+        "usage_hint": "[run <workflow-name>] | [status]",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://api.REPLACE_WITH_YOUR_DOMAIN/v1/slack/install/callback"
+    ],
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "chat:write.public",
+        "commands",
+        "im:write",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://api.REPLACE_WITH_YOUR_DOMAIN/v1/slack/events",
+      "bot_events": [
+        "app_mention"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://api.REPLACE_WITH_YOUR_DOMAIN/v1/slack/interactions"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

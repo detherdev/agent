@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { query, withTx } from "runtime";
 import { runsQueue } from "../queue.js";
+import { notifyApprovalDecided } from "../services/notifications.js";
 
 const Decision = z.object({
   decision: z.enum(["approve", "reject", "edit"]),
@@ -61,6 +62,10 @@ approvalsRouter.post("/:id/decide", zValidator("json", Decision), async (c) => {
   });
 
   if (!updated) return c.json({ error: "approval not found or already decided" }, 404);
+
+  const verdict = body.decision === "approve" ? "approved" : body.decision === "edit" ? "edited" : "rejected";
+  // Best-effort: catch up the Slack card if one was posted.
+  await notifyApprovalDecided(id, verdict, userId);
 
   // Workflow-run approval: rejection cancels the run; approval re-queues
   // for resumeAfterApproval.

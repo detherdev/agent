@@ -14,6 +14,7 @@ import {
 } from "runtime";
 import { runsQueue } from "../queue.js";
 import { checkPlanLimits, incrementRunCount } from "./usage-meter.js";
+import { notifyApprovalPending } from "./notifications.js";
 
 /**
  * Task orchestrator tick.
@@ -204,9 +205,10 @@ async function beginWorkflowPhase(
 }
 
 async function beginHumanGate(phase: TaskPhaseRow, task: TaskRow): Promise<void> {
-  await query(
+  const ins = await query<{ id: string }>(
     `insert into approvals (workspace_id, task_phase_id, step, reason, pending_tool_name, pending_tool_input)
-       values ($1, $2, 0, $3, $4, '{}'::jsonb)`,
+       values ($1, $2, 0, $3, $4, '{}'::jsonb)
+     returning id`,
     [
       task.workspace_id,
       phase.id,
@@ -216,4 +218,11 @@ async function beginHumanGate(phase: TaskPhaseRow, task: TaskRow): Promise<void>
   );
   await markPhaseAwaitingHuman(phase.id);
   log.info({ task: task.id, phase: phase.id }, "task phase paused for human");
+
+  const approvalId = ins.rows[0]?.id;
+  if (approvalId) {
+    await notifyApprovalPending(approvalId).catch((err) =>
+      log.error({ err: (err as Error).message, phase: phase.id, approvalId }, "notify failed"),
+    );
+  }
 }

@@ -199,7 +199,30 @@ fly secrets set -a REPLACE_WITH_FLY_APP_NAME \
   INBOUND_WEBHOOK_PASSWORD="..." \
   INBOUND_EMAIL_DOMAIN="inbox.yourdomain.com" \
   WEB_URL="https://app.yourdomain.com" \
-  SENTRY_DSN="..."
+  SENTRY_DSN="..." \
+  SLACK_CLIENT_ID="..." \
+  SLACK_CLIENT_SECRET="..." \
+  SLACK_SIGNING_SECRET="..." \
+  SLACK_REDIRECT_URI="https://api.yourdomain.com/v1/slack/install/callback"
+```
+
+### 2.10b Slack interactive bot (optional, recommended)
+
+The bot lets workspaces approve runs from Slack instead of the web inbox.
+Without it, approvals still work fine — they're just decided in `/inbox`.
+
+```
+1. api.slack.com/apps → Create New App → "From a manifest"
+2. Pick your workspace, paste infra/slack/manifest.json
+   (replace REPLACE_WITH_YOUR_DOMAIN with your domain first)
+3. Install to your dev workspace; copy:
+   - Client ID  → SLACK_CLIENT_ID
+   - Client Secret → SLACK_CLIENT_SECRET
+   - Signing Secret → SLACK_SIGNING_SECRET
+4. Set redirect URI: https://api.yourdomain.com/v1/slack/install/callback
+5. Each customer hits `/connect` in the web app → "Install" on the
+   Slack approvals tile → completes the OAuth → bot lands in their
+   workspace.
 ```
 
 ### 2.11 Vercel
