@@ -20,6 +20,7 @@ import { inboundRouter } from "./routes/inbound.js";
 import { specDraftsRouter } from "./routes/spec-drafts.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { discoveryRouter } from "./routes/discovery.js";
+import { leadsRouter } from "./routes/leads.js";
 import { verifyClerkJwt, requireWorkspace } from "./middleware/auth.js";
 
 const app = new Hono();
@@ -74,6 +75,7 @@ app.onError((err, c) => {
 app.route("/v1/connect/webhook", connectWebhookRouter);
 app.route("/v1/webhooks", webhooksRouter);
 app.route("/v1/webhooks/inbound-email", inboundRouter);
+app.route("/v1/leads", leadsRouter);
 
 // ===== Bootstrap (JWT only — workspace may not exist yet) =====
 

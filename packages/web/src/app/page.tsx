@@ -25,8 +25,8 @@ export default async function Home() {
       {/* Hero */}
       <section className="border-b border-neutral-900">
         <div className="mx-auto max-w-5xl px-6 py-24 text-center">
-          <div className="mb-4 inline-block rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-            For 5–50 person professional-services firms
+          <div className="mb-4 inline-block rounded-full border border-emerald-900/60 bg-emerald-950/30 px-3 py-1 text-xs text-emerald-300">
+            Built for Canadian SMBs · Hosted in Toronto · PIPEDA-compliant
           </div>
           <h1 className="text-balance text-4xl font-semibold tracking-tight text-neutral-100 sm:text-5xl">
             An assistant that actually does the work.
@@ -165,6 +165,14 @@ export default async function Home() {
             </Link>{" "}
             when none of the templates fit.
           </p>
+          <div className="mt-6">
+            <Link
+              href="/for/bookkeepers"
+              className="text-sm text-emerald-400 hover:text-emerald-300"
+            >
+              Specifically a Canadian bookkeeping firm? See the deeper writeup →
+            </Link>
+          </div>
         </div>
       </section>
 

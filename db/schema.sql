@@ -297,6 +297,29 @@ end $$;
 
 create index if not exists approvals_task_phase_idx on approvals(task_phase_id) where task_phase_id is not null;
 
+-- ===== Marketing leads (pre-signup demo / waitlist captures) =====
+
+create table if not exists leads (
+  id          uuid primary key default uuid_generate_v4(),
+  email       text not null,
+  name        text,
+  company     text,
+  size        text,
+  vertical    text,
+  message     text,
+  source      text,
+  referrer    text,
+  utm_source  text,
+  utm_medium  text,
+  utm_campaign text,
+  status      text not null default 'new' check (status in ('new','contacted','qualified','closed_won','closed_lost')),
+  notes       text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists leads_status_created_idx on leads(status, created_at desc);
+create index if not exists leads_email_idx on leads(email);
+
 -- ===== Per-workflow long-term memory =====
 
 create table if not exists workflow_memory (
