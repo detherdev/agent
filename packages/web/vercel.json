@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter runtime build && pnpm --filter evals build && pnpm --filter web build",
+  "outputDirectory": ".next",
+  "installCommand": "echo 'install handled by buildCommand'",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD ./ ../runtime ../evals"
+}
