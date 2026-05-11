@@ -44,7 +44,7 @@ export async function runAgent(args: RunAgentArgs): Promise<RunAgentResult> {
   const { workflow, runId, input, shadowMode } = args;
   await updateRunStatus(runId, { status: "running", started_at: new Date() });
 
-  const tools = await buildToolset(workflow.tool_config, workflow.workspace_id);
+  const tools = await buildToolset(workflow.tool_config, workflow.workspace_id, workflow);
   const messages: MessageParam[] = [
     { role: "user", content: typeof input === "string" ? input : JSON.stringify(input) },
   ];
@@ -129,7 +129,7 @@ async function resumeFromTurns(
   const log = runLog(runId);
   await updateRunStatus(runId, { status: "running", started_at: new Date() });
 
-  const tools = await buildToolset(workflow.tool_config, workflow.workspace_id);
+  const tools = await buildToolset(workflow.tool_config, workflow.workspace_id, workflow);
   const toolByName = new Map(tools.map((t) => [t.name, t]));
 
   const turns = await loadTurns(runId);

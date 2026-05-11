@@ -43,7 +43,12 @@ export const CustomTool = z.object({
 });
 export type CustomTool = z.infer<typeof CustomTool>;
 
-export const BuiltinToolName = z.enum(["document_understand", "browser_use"]);
+export const BuiltinToolName = z.enum([
+  "document_understand",
+  "browser_use",
+  "delegate_subagent",
+  "delegate_parallel",
+]);
 export type BuiltinToolName = z.infer<typeof BuiltinToolName>;
 
 export const ToolConfig = z.object({

@@ -105,9 +105,12 @@ Microsoft Entra for Outlook, Stripe Connect, Slack app, etc.).
 ```
 1. nango.dev → New project
 2. For each provider you want to expose (gmail, quickbooks, outlook,
-   stripe, slack, google-drive):
+   stripe, slack, google-drive, plaid, netsuite, hubspot):
    - Click "Add integration"
    - Paste client_id + client_secret from the provider's developer console
+   - For Plaid: use the integration template that proxies to /transactions/get
+   - For NetSuite: choose OAuth2 (NOT TBA); accountId arrives via
+     connection_config.accountId from the install dialog
 3. Webhook URL: https://api.yourdomain.com/v1/connect/webhook
 4. Webhook signing secret: generate, paste into NANGO_WEBHOOK_SECRET
 Get:

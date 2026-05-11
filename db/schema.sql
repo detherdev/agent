@@ -115,6 +115,8 @@ create table if not exists runs (
   step_count    int not null default 0,
   shadow_mode   boolean not null default false,
   dedup_key     text,
+  parent_run_id uuid references runs(id) on delete cascade,
+  parent_step   int,
   started_at    timestamptz,
   finished_at   timestamptz,
   created_at    timestamptz not null default now()
@@ -123,6 +125,7 @@ create table if not exists runs (
 create unique index if not exists runs_workflow_dedup_uniq
   on runs(workflow_id, dedup_key)
   where dedup_key is not null;
+create index if not exists idx_runs_parent_run_id on runs(parent_run_id) where parent_run_id is not null;
 
 create index if not exists runs_workflow_status_idx on runs(workflow_id, status);
 create index if not exists runs_workspace_created_idx on runs(workspace_id, created_at desc);

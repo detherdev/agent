@@ -84,6 +84,27 @@ export function extractProviderMetadata(
       const email = typeof cc.email === "string" ? cc.email : undefined;
       return email ? { email } : {};
     }
+    case "netsuite": {
+      // NetSuite's account id arrives as `accountId` (sometimes `account_id`
+      // depending on Nango integration template) — it doubles as the
+      // suitetalk subdomain for every API call.
+      const accountId =
+        (typeof cc.accountId === "string" && cc.accountId) ||
+        (typeof cc.account_id === "string" && cc.account_id) ||
+        (typeof cc.account === "string" && cc.account) ||
+        null;
+      return accountId ? { account_id: accountId } : {};
+    }
+    case "plaid": {
+      // Plaid's institution name is helpful UX context; access_token lives
+      // in Nango's secure store and we never persist it.
+      const institutionName = typeof cc.institution_name === "string" ? cc.institution_name : undefined;
+      const itemId = typeof cc.item_id === "string" ? cc.item_id : undefined;
+      const out: Record<string, unknown> = {};
+      if (institutionName) out.institution_name = institutionName;
+      if (itemId) out.item_id = itemId;
+      return out;
+    }
     default:
       return {};
   }

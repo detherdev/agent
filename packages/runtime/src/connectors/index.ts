@@ -5,6 +5,8 @@ import { outlookTools } from "./outlook.js";
 import { stripeTools } from "./stripe.js";
 import { slackTools } from "./slack.js";
 import { driveTools } from "./drive.js";
+import { plaidTools } from "./plaid.js";
+import { netsuiteTools } from "./netsuite.js";
 
 export {
   nangoProxy,
@@ -20,6 +22,8 @@ const REGISTRY: Record<string, () => ToolDefinition[]> = {
   stripe: stripeTools,
   slack: slackTools,
   "google-drive": driveTools,
+  plaid: plaidTools,
+  netsuite: netsuiteTools,
 };
 
 export function listConnectorSlugs(): string[] {

@@ -1,23 +1,45 @@
-import type { CustomTool, ToolConfig, ToolDefinition, BuiltinToolName } from "../types.js";
+import type {
+  CustomTool,
+  ToolConfig,
+  ToolDefinition,
+  BuiltinToolName,
+  Workflow,
+} from "../types.js";
 import { makeHttpTool } from "./http.js";
 import { makeSqlTool } from "./sql.js";
 import { documentUnderstandTool } from "./document_understand.js";
 import { browserUseTool } from "./browser_use.js";
+import { makeDelegateTools } from "./delegate.js";
 import { loadMcpTools } from "../mcp.js";
 import { loadConnectorTools } from "../connectors/index.js";
 
-export { makeHttpTool, makeSqlTool, documentUnderstandTool, browserUseTool };
+export { makeHttpTool, makeSqlTool, documentUnderstandTool, browserUseTool, makeDelegateTools };
 
-const BUILTINS: Record<BuiltinToolName, () => ToolDefinition> = {
+// Stateless built-ins. Tools that need workflow context (delegate_*) are
+// constructed in buildToolset via the workflow argument instead.
+const BUILTINS: Partial<Record<BuiltinToolName, () => ToolDefinition>> = {
   document_understand: documentUnderstandTool,
   browser_use: browserUseTool,
 };
 
-export async function buildToolset(config: ToolConfig, workspaceId: string): Promise<ToolDefinition[]> {
+export async function buildToolset(
+  config: ToolConfig,
+  workspaceId: string,
+  workflow?: Workflow,
+): Promise<ToolDefinition[]> {
   const tools: ToolDefinition[] = [];
 
   for (const ref of config.connectors) {
     tools.push(...loadConnectorTools(ref.slug));
+  }
+
+  const wantsDelegate =
+    workflow != null &&
+    config.builtins.some((b) => b === "delegate_subagent" || b === "delegate_parallel");
+  if (wantsDelegate) {
+    const delegateTools = makeDelegateTools(workflow);
+    const wantedNames = new Set(config.builtins as string[]);
+    tools.push(...delegateTools.filter((t) => wantedNames.has(t.name)));
   }
 
   for (const name of config.builtins) {

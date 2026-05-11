@@ -7,10 +7,14 @@ import { startConnect, advanceAfterConnect } from "./actions";
 
 const PROVIDER_DISPLAY: Record<string, { name: string; icon?: string }> = {
   gmail: { name: "Gmail" },
+  outlook: { name: "Outlook" },
   quickbooks: { name: "QuickBooks" },
   stripe: { name: "Stripe" },
   slack: { name: "Slack" },
   hubspot: { name: "HubSpot" },
+  "google-drive": { name: "Google Drive" },
+  plaid: { name: "Plaid (bank feeds)" },
+  netsuite: { name: "NetSuite" },
 };
 
 export function ConnectTiles({

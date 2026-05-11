@@ -4,6 +4,7 @@ export * from "./guardrails.js";
 export * from "./pricing.js";
 export * from "./billing.js";
 export { buildToolset, makeHttpTool, makeSqlTool } from "./tools/index.js";
+export { runSubagent, type SubagentResult } from "./subagent.js";
 export { loadMcpTools } from "./mcp.js";
 export {
   loadConnectorTools,
